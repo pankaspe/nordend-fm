@@ -87,8 +87,8 @@ every shortcut.
   clipboard
 - **Sidebar:** places, GTK bookmarks (also `smb://` and `sftp://`, mounted through gvfs by the
   `remotes` plugin), disks through udisks2 (mount, unmount, eject)
-- **Plugins:** features outside the core, compiled in and switched off per build or in
-  `config.toml` ([docs/plugins.md](docs/plugins.md))
+- **Plugins:** features outside the core, built in on request (`-DNORDEND_PLUGINS=all`) and
+  switched off in `config.toml` ([docs/plugins.md](docs/plugins.md))
 - **Opening:** default applications and "Open With", resolved exactly as GLib does; a terminal
   in any folder (<kbd>F4</kbd>)
 - **Always current:** folders follow changes on disk (inotify); history with
@@ -160,7 +160,7 @@ sudo xbps-install -S cmake ninja pkgconf wayland-devel wayland-protocols \
     libwebp-devel libjxl-devel zlib-devel sdbus-c++-devel
 git clone https://github.com/pankaspe/nordend-fm
 cd nordend-fm
-cmake -B build -G Ninja
+cmake -B build -G Ninja    # the core alone; add -DNORDEND_PLUGINS=all for the plugins
 cmake --build build
 ./build/nordend            # your home folder, or ./build/nordend ~/Pictures
 cmake --install build --prefix ~/.local --strip   # nordend, its desktop entry and icon

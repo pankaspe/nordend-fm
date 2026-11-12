@@ -6,13 +6,15 @@ version=0.5.0
 revision=1
 build_style=cmake
 # NORDEND_WERROR: a newer compiler's new warning must not break the package
-configure_args="-DNORDEND_BUILD_TESTS=OFF -DNORDEND_WERROR=OFF"
+# NORDEND_PLUGINS=all: every plugin in plugins/ (each can be switched off in config.toml)
+configure_args="-DNORDEND_BUILD_TESTS=OFF -DNORDEND_WERROR=OFF -DNORDEND_PLUGINS=all"
 hostmakedepends="pkgconf wayland-devel"
 makedepends="wayland-devel wayland-protocols libglvnd-devel libxkbcommon-devel
  harfbuzz-devel freetype-devel fontconfig-devel tomlplusplus-devel
  libwebp-devel libjxl-devel zlib-devel sdbus-c++-devel"
-# MIME types from shared-mime-info's database; udisks2 (disks in the sidebar)
-# and xdg-desktop-portal (desktop colours) are used when present
+# MIME types from shared-mime-info's database; udisks2 (disks in the sidebar),
+# xdg-desktop-portal (desktop colours) and gvfs (the remotes plugin's network
+# folders) are used when present
 depends="shared-mime-info hicolor-icon-theme"
 short_desc="Fast, native file manager for Wayland, made for photographers"
 maintainer="pankaspe <7622507+pankaspe@users.noreply.github.com>"

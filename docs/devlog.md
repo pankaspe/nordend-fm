@@ -8,32 +8,33 @@ Work log, newest first. Each entry: what was done, decisions, measurements, open
 
 **Done:** a small plugin system so features outside the core do not grow it. `src/plugin` holds
 the interface (`plugin::Plugin`, hooks with do-nothing defaults) and `plugin::Plugins`, the set
-running; `plugins/<id>` holds each plugin, found by `plugins/CMakeLists.txt`, built when
-`NORDEND_PLUGIN_<ID>` is on, listed in a generated `builtin.cpp`, and switched off at run time
-with `[plugins] disabled` in `config.toml`. The gvfs code moved from `platform` to
-`plugins/remotes` (namespace `nordend::plugins::remotes`) together with the glue from `main.cpp`;
+running; `plugins/<id>` holds each plugin, found by `plugins/CMakeLists.txt`, listed in a
+generated `builtin.cpp`, and switched off at run time with `[plugins] disabled` in `config.toml`.
+A plain build has no plugins; `-DNORDEND_PLUGINS=all` (or a list, or `NORDEND_PLUGIN_<ID>=ON`)
+builds them, and the Void template passes `all`. The gvfs code moved from `platform` to
+`plugins/remotes` (namespace `nordend::plugins::remotes`) with its glue from `main.cpp`;
 `platform::BusLoop` became a public header so plugins can serve D-Bus on the loop.
+`docs/plugins.md` says how to write one and what it must bring.
 
 **Decisions:** compiled in, not `dlopen`ed: no C++ ABI to keep, no foreign code in the process
-(Nordend cages what it reads; a loaded library would undo that), and Nix or a distribution picks
-plugins with a flag. The core keeps what any network plugin needs: bookmarks with any `scheme://`
-URI (`fs::parse_remote_uri` no longer knows smb or sftp), `views::Remotes` as the seam, the
-password card and masked text field. `plugin::Plugins` hides remote bookmarks whose scheme no
-running plugin claims (as before for unknown schemes), shows those of a plugin that cannot mount
-now (gvfs missing) so a click says why, and sends each mount to the plugin of its scheme.
+(Nordend cages what it reads; a loaded library would undo that), and a package picks plugins with
+one flag. Off by default, so the core stays the core and a package decides. The core keeps what
+any network plugin needs: bookmarks with any `scheme://` URI (`fs::parse_remote_uri` no longer
+knows smb or sftp), `views::Remotes` as the seam, the password card and masked text field.
+`plugin::Plugins` hides remote bookmarks whose scheme no running plugin claims, shows those of a
+plugin that cannot mount now (gvfs missing) so a click says why, and sends each mount to the
+plugin of its scheme.
 
 **Tests:** `plugin_test.cpp` with fake plugins (which run, places by scheme, mount dispatch, the
-config key); the gvfs cases moved to `plugin_remotes_test.cpp`, built only with the plugin. Full
-suite 525 of 527 with the plugin, 520 of 522 without; the two failures are the known
-`column_view_test.cpp:334` and `transfer_test.cpp:249`. Checked by hand in an isolated instance:
-an `smb://` bookmark shows (mounted, with its eject icon) and disappears with
-`disabled = ["remotes"]`.
+config key); the gvfs cases in `plugin_remotes_test.cpp`, built only with the plugin. With
+`NORDEND_PLUGINS=all` 429 of 432 cases pass, in the default build 424 of 427; the three failures
+(`column_view_test.cpp:334`, `details_view_test.cpp:151`, `transfer_test.cpp:249`) fail the same
+way on `main` before this change in this environment (MIME data, sort order, tmpfs file size).
+Checked by hand in an isolated instance: an `smb://` bookmark shows, mounts and gets its eject
+icon, and disappears with `disabled = ["remotes"]` or in a build without the plugin.
 
-Ctrl+L (merged meanwhile) asks `views::Remotes::handles` first: a scheme no running plugin
-claims is refused on the card and not bookmarked. `nix/package.nix` ships `plugins/` and takes
-`disabledPlugins`. How to write a plugin and what it must bring: `docs/plugins.md`.
-
-**Open:** translations of a plugin's messages still live in `core/src/i18n_de.cpp`.
+**Open:** no translation system yet, so texts are English; a plugin's texts would have to come
+with the plugin when one arrives.
 
 ---
 
@@ -60,9 +61,9 @@ local paths, places with mounts, the password card, the browser flow with a fake
 field, and a read-only check of the real session bus). End to end in a headless Umbriel with its
 own runtime dir and session bus: a guest share on a local Samba server mounted from the sidebar and
 showed its files, unmounted from the eject icon; a real server's share asked for a password and
-cancelling it said so; on a bus without gvfs the message appeared. Full suite: 521 of 523 cases
-pass; the two failures (`column_view_test.cpp:334`, `transfer_test.cpp:249`) fail the same way
-before the change in this environment.
+cancelling it said so; on a bus without gvfs the message appeared. The full suite's only
+failures are the three that fail on `main` before the change in this environment (see the
+plugins entry).
 
 **Open:** AskQuestion (sftp host keys) uses the two-button confirm card with the first choice; a
 card for more choices could come later. The breadcrumb shows the FUSE path of a mounted share.
