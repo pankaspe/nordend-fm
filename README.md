@@ -13,6 +13,7 @@
   <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white" alt="C++20">
   <img src="https://img.shields.io/badge/Wayland-native-FFBC00?logo=wayland&logoColor=black" alt="Wayland native">
   <img src="https://img.shields.io/badge/tests-420%20%C2%B7%20ASan%20%C2%B7%20TSan-4B32C3" alt="420 tests, ASan, TSan">
+  <a href="https://github.com/pankaspe/nordend-fm/actions/workflows/ci.yml"><img src="https://github.com/pankaspe/nordend-fm/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <img src="https://img.shields.io/badge/license-MIT-3DA639" alt="MIT license">
 </p>
 

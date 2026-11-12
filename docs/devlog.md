@@ -4,6 +4,36 @@ Work log, newest first. Each entry: what was done, decisions, measurements, open
 
 ---
 
+## 2026-11-12 — CI on every push and pull request, and clang (quality step, Q3 and Q4)
+
+**Q3, clang 21.** The whole tree (Nordend, the helper, the tools, the tests) builds with clang 21
+and the same warnings as GCC with `-Werror`: none at all. The suite passes (420 test cases).
+Only the tests' link needed something: LibRaw's pkg-config asks for `-fopenmp`, which clang
+turns into LLVM's OpenMP (`libomp-devel`). The binaries come out smaller: `nordend` 2.74 MiB
+stripped against GCC's 3.34, the helper 0.78 against 1.04 (speed not compared yet). A
+`build-clang` joins the checks before every commit.
+
+**Q4, CI.** `.github/workflows/ci.yml` runs on every push to `main` and every pull request, in
+Void's official container (`ghcr.io/void-linux/void-glibc-full`), with the libraries Nordend is
+made with: clang-format; GCC and clang Release builds with `-Werror` and the tests; GCC with
+ASan and UBSan, failing on any sanitizer report. The tests run as a plain user, with Mesa's
+software renderer, so those that draw run instead of skipping; the container runs without
+Docker's seccomp filter, so the helper's cage (seccomp and landlock) is set up and tested there
+too. Read-only token, no secrets: a pull request from a fork cannot change anything. TSan and
+clang-tidy stay manual (too slow), and the tests that need the author's raw samples skip
+themselves, as before. The CI does not approve anything: every pull request is still read,
+tried and decided here.
+
+The first run found two things: the ASan job missed the sanitizers' runtime
+(`libsanitizer-devel`), and `memory_test` failed with Mesa's software renderer. The latter was
+the test's fault: it measured the whole process's memory, which other threads left by earlier
+tests could grow meanwhile; it now checks malloc's own counters (reproduced here with
+`LIBGL_ALWAYS_SOFTWARE=1`; the new checks still fail without `give_back_large_blocks()`).
+Skipped in CI, as they should be: the tests that need a session or system bus (the portal,
+udisks2).
+
+---
+
 ## 2026-11-12 — Grid thumbnails up to 512 px (PR #2 by barrulus)
 
 The first outside contribution merged: barrulus's #2 adds 384 and 512 px to the grid's sizes
