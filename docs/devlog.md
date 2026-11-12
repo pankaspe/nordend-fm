@@ -4,6 +4,519 @@ Work log, newest first. Each entry: what was done, decisions, measurements, open
 
 ---
 
+## 2026-11-12 — Network bookmarks through gvfs
+
+**Done:** `smb://` and `sftp://` lines in the GTK bookmarks file are sidebar places now, without a
+path until mounted. `platform::Gvfs` talks to gvfsd on the session bus through sdbus-c++
+(`MountTracker.MountLocation`, `ListMounts`, `Mount.Unmount`) and exports an
+`org.gtk.vfs.MountOperation` object per mount, so `AskPassword` and `AskQuestion` arrive on the
+loop thread and are answered from Nordend's own cards (`PasswordDialog`, `ConfirmDialog`). A mounted
+share opens through gvfsd-fuse's folder (`$XDG_RUNTIME_DIR/gvfs/smb-share:server=…,share=…`) and
+gets the eject icon. `TextField` gained a masked mode for the password.
+
+**Decisions:** gvfs's D-Bus protocol rather than `gio mount` in a child process: no GLib or gio
+binary needed, structured errors, and the password dialog stays Nordend's. URIs map to mount specs
+as gvfs's own mappers do (smb: server and share case-folded, `DOMAIN;user` split, port 445
+dropped; sftp: host, user, port); a mount matches when it has every key asked for, since gvfs adds
+the user who logged in. gvfsd is only asked for its mounts when it already runs, so Nordend does
+not start it for people without network bookmarks. Without a session bus or gvfs a message says
+so; nothing else changes.
+
+**Validation:** 14 new cases (URI parsing, labels, removal by URI, smb/sftp mount specs, matching,
+local paths, places with mounts, the password card, the browser flow with a fake gvfs, the masked
+field, and a read-only check of the real session bus). End to end in a headless Umbriel with its
+own runtime dir and session bus: a guest share on a local Samba server mounted from the sidebar and
+showed its files, unmounted from the eject icon; a real server's share asked for a password and
+cancelling it said so; on a bus without gvfs the message appeared. Full suite: 521 of 523 cases
+pass; the two failures (`column_view_test.cpp:334`, `transfer_test.cpp:249`) fail the same way
+before the change in this environment.
+
+**Open:** AskQuestion (sftp host keys) uses the two-button confirm card with the first choice; a
+card for more choices could come later. The breadcrumb shows the FUSE path of a mounted share.
+
+---
+
+## 2026-11-11 — SVG icons prepared against fork main
+
+**Integration:** rebased the icon-theme prerequisite and six SVG commits onto the fork's
+`main` (`da06cd9`) in a separate branch. The fork did not yet contain icon-theme support.
+Retained its merged larger-grid, transparency and Nix smoke-test changes; excluded the older
+combined branch's video-thumbnail and packaging-policy changes. Added the SVG comparison
+header to the Nix source fileset so the development renderer builds when unit tests are off.
+
+**Validation:** renderer, picture decoder, SVG fixtures/tests and fuzz harness are unchanged
+from `841d54f`; its final 1801-second fuzz and corpus evidence still applies to those sources.
+The integrated release suite passes 483 cases / 140,752 assertions. ASan/UBSan passes
+482 cases / 140,717 assertions, using the documented fixture adaptations in a temporary copy,
+Mesa software rendering and fresh processes for both memory tests. The first sanitizer run
+hit `memory_test.cpp:30`: ASan released cached anonymous memory between the two measurements.
+The memory-report case passes separately (14 assertions); it was not omitted or weakened.
+Only the already documented unrelated isolate zero-length memcpy diagnostics remain.
+`nix flake check` passes the x86_64-linux package and installed-entry-point smoke checks;
+aarch64-linux was not built on this host. Integration evidence is retained locally under
+`build-svg-handoff/pr-integration/` in the original checkout.
+
+---
+
+## 2026-11-11 — SVG hardening: bounded repeated work and safe numeric conversions
+
+**Scope:** audited the required hardening section after stage 3. Existing input, XML,
+geometry, reference, layer, image and blur bounds remain in place. No rendering feature,
+reference capture, dependency or acceptance policy changed. The revised stage-3 visual
+policy in `docs/svg-renderer-validation.md` still applies; that document now records the
+resource limits, exception boundaries and sanitizer procedure.
+
+**Work bounds:** CSS's existing 10-million-unit budget now charges attribute/declaration
+bytes and selector/class-list scans, rather than counting rules alone. Dash expansion
+charges zero-entry scans, resets and curve subdivision against its million-unit budget,
+then contributes that work and parsed array bytes to the canvas budget. Repeated inherited
+paint, resource attributes and embedded-image data share a 64 MiB cumulative parsing-byte
+budget. Resource inheritance no longer copies unused element text. These close amplification
+paths where many small shapes could repeatedly process a large inherited value while staying
+under node and raster limits. They are deterministic operation/byte limits, not a wall-clock
+promise or a whole-process memory cap.
+
+**Numbers:** extreme arc radius correction and subnormal centre arithmetic could produce
+NaN before converting the subdivision count to an integer, despite finite input. Angles are
+now checked before that conversion. Pattern wrapping previously subtracted a rounded huge
+quotient; cancellation could leave an out-of-range remainder and an undefined integer cast.
+It now uses a bounded remainder before indexing. Original probes demonstrated both failures;
+no reference renderer was used. Ordinary geometry and FreeType stroke expansion are unchanged.
+
+**Regression coverage:** eight new cases cover CSS amplification, zero-heavy dashes,
+repeated inherited paint/dash text, large pattern translations, both arc-overflow mechanisms,
+the exact 8 MiB input boundary, warning-callback exceptions and padded-layer aggregate memory.
+Four small original fuzz seeds preserve numeric and dash cases. The large resource probes
+are generated in tests, not committed as oversized fixtures. Pre-fix CSS/dash/texture and
+inherited-text regressions failed as expected; the arc probes produced float-cast sanitizer
+diagnostics. Those probes now fail cleanly or retain the expected solid texture.
+
+**Validation:** 60 focused cases / 13,318 assertions pass. Full release passes 484 cases /
+140,505 assertions; ASan/UBSan passes 483 cases / 140,490 assertions (the allocator case has
+no assertions under ASan). Validation uses the approved copy-only fixture adaptations,
+Mesa software rendering and the Nix package's isolation of the allocator-sensitive test.
+Both copied ctest suites and `nix build --no-link` pass. Earlier runs reproduced the known
+allocator-state assertion and an external NVIDIA EGL leak; neither was suppressed in SVG
+code. Only the previously documented unrelated isolate zero-length memcpy UBSan diagnostics
+remain in the final full sanitizer log. Final-source clang/libFuzzer with ASan, UBSan and
+float-cast-overflow checking completed 11,528,247 inputs in 1801 seconds, peak RSS
+843 MiB, exit 0, with no finding, timeout or OOM. UBSan was configured to halt on error.
+Preliminary runs were explicitly stopped during the audit and do not count as final evidence.
+The final process exited and source/binary hashes remained unchanged.
+
+**Compatibility and performance:** diagnostic pass counts at 16/48/128 are 4346/4710 (92.27%),
+4441/4710 (94.29%) and 4525/4710 (96.07%). The filtered subset remains 18/20, 20/20 and 20/20.
+All 14,130 per-image comparison results match completed stage 3, with no stale sources or
+missing timings. All 102 fixed native-review PNGs are byte-identical to the accepted stage-3
+review, retaining its named deviations and the unchanged 818 diagnostic failures. Final,
+uncontended parse/render totals are 0.607327, 0.856290 and 2.088467 s, respectively 0.984,
+0.952 and 1.137 times the preserved baseline; all three performance gates pass. Local logs, immutable binaries,
+hashes and reproduction scripts are under ignored `build-svg-handoff/hardening/`.
+
+**Disposition:** the hardening pass is complete. No known SVG failure remains from this audit;
+this is bounded regression/fuzz evidence, not a proof against all possible hostile inputs.
+The original brief and third-party corpus remain untracked/ignored.
+
+---
+
+## 2026-11-11 — SVG stage 3: FreeType strokes and native-size acceptance
+
+**Decision:** the author explicitly approved ending the pixel-parity effort after repeated
+iterations failed to clear the original acceptance gates. `docs/svg-renderer-validation.md`
+records the replacement policy: semantic/geometric tests, a fixed native-size review,
+performance, full builds/tests and sanitizer fuzzing. The 98% corpus and all-filtered pixel
+pass requirements are retired; the captured references and numeric comparator are unchanged
+and remain diagnostic. This supersedes the acceptance conclusions in the earlier entries.
+
+**Implementation:** FreeType now expands every stroke width. Removed the experimental custom
+stroker and separate thin-stroke coverage/union path, reducing `raster.cpp` from 1106 to 699
+lines. The existing bounded coverage sampler remains. Anchored FreeType's local coordinates
+to whole scaled units so an unused move cannot shift its fixed-point rounding phase; move-only
+subpaths do not paint caps. The bounds regression now exercises the backend's output-point
+limit instead of the removed rectangle-union work limit. Geometric tests for split/retraced
+strokes, gradients, caps, tight curves and cubic endpoint coverage remain and pass. A diagonal
+stroke now has the same sampled area and interior footprint as its normal-width rectangle.
+
+**Features preserved:** colour matrices, Gaussian blur, patterns, embedded PNG/JPEG through
+Wuffs, offscreen effects and once-per-file unsupported-filter warnings remain intact. No new
+dependency, copied third-party implementation, resvg invocation or reference recapture.
+
+**Native review:** `tests/data/svg-review.tsv` fixes 34 entries before rendering, including all
+20 filtered sources and 14 named examples of complex strokes, prior problems, embedded images,
+patterns and aspect-ratio sizing. `scripts/svg_review.py` verifies source hashes and requires
+every selected capture; missing captures fail rather than shrinking the set. All 102 pairs
+were inspected at native 16/48/128 on light and dark backgrounds and accepted under the new
+policy. No missing components, broken masks, displaced images, missing patterns or unusable
+silhouettes were found. Named deviations: Desktop's 16 px wave detail is denser/darker;
+Firefox/LibreOffice have fine edge and stroke-weight changes; Virustotal retains public rounding
+versus reference ceiling. Source-dark symbolic artwork has low contrast on dark backgrounds in
+both versions. Exact reference sampling differences remain unresolved, not reclassified as
+pixel passes. Local review, per-entry assessment and renderer/selection hashes are preserved in
+`build-svg-handoff/freetype-reset/review/`.
+
+**Validation:** 52 focused cases / 13,286 assertions pass. Full release passes 476 cases /
+140,085 assertions (two skipped; 9.42 s); ASan/UBSan passes 475 cases / 140,070 assertions
+(three skipped; 14.06 s), using the approved copy-only fixture adaptations. Only the previously
+documented unrelated isolate zero-length `memcpy` diagnostics remain. `nix build --no-link`
+passes. Final-source clang/libFuzzer ASan/UBSan completes 12,389,269 inputs in 1801 seconds,
+peak RSS 644 MiB, exit 0, with no finding, timeout or OOM. The fuzzer has exited and source/binary
+hashes remain unchanged. Uncontended parse/render totals are 0.603146, 0.854762 and 2.088420 s
+at 16/48/128, respectively 0.977, 0.951 and 1.137 times the preserved baseline; all performance
+gates pass. No stale sources or missing timings, and final per-image metrics match the frozen
+native review exactly.
+
+**Diagnostic corpus:** 4346/4710 (92.27%), 4441/4710 (94.29%) and 4525/4710 (96.07%) at
+16/48/128. The filtered subset has 18/20 numeric passes at 16 and 20/20 at 48/128; Shotwell
+(max 33, four pixels over 24) and SimpleScan (max 34, three pixels) fail at 16. All twenty
+were accepted in the native-size review. Every one of the 818 numeric failures remains listed
+in the ignored `remaining-failures.tsv/json`, including the 1/11/7 dimension-contract differences.
+No claim of pixel parity is made. Detailed validation, filtered results, assessments and source/
+binary hashes are under `build-svg-handoff/freetype-reset/`.
+
+**Disposition:** stage 3 is complete under the explicitly approved revised acceptance policy.
+The fixed native review, semantic tests, performance, full builds/tests and final-source fuzzing
+all pass. The original user brief and local third-party material remain outside the commit.
+
+---
+
+## 2026-11-10 — SVG stroke invariants repaired; small-size compatibility still open
+
+**Scope:** implemented the two concrete defects from the compatibility audit without changing
+references, thresholds or public sizing. Existing stage-3 work is preserved. No resvg invocation,
+third-party implementation or new dependency was used.
+
+**Thin strokes:** each flattened segment contributes rectangular coverage fragments within its
+neighbouring pixels. Those fragments form a union before the paint is composited once. This
+retains the existing centreline approximation while eliminating split seams and repeated opacity
+for overlapping/retraced geometry. The pixel-aligned split-line probe now has alpha 255 instead
+of 192; overlapping and crossing half-opacity subpaths have alpha 128 instead of 192. Tests
+also cover reverse traversal, partial overlap, vertical strokes and gradient paint. Fragment
+storage is capped at 262,144; sorting and union work consume the shared 64M work budget. An
+original dense-overlap test verifies clean failure rather than unbounded union work.
+
+**Wide strokes:** the apparent full-path assembly failure was actually a spurious inflection
+root near a cubic endpoint with coincident controls. Changing the bounds origin changed floating
+point cancellation, introducing a tiny subdivision whose normals collapsed. For a cubic with
+an endpoint derivative of zero, the curvature numerator has constant sign on the open interval;
+the implementation now uses that fact instead of solving the unstable polynomial. Coefficients
+also use differences of consecutive controls. An original regression previously changed alpha
+from 255 to 48 merely by adding an unused move; both versions now agree throughout the image.
+Musescore's audited missing pixel is restored, and its 128 px reference maximum falls from 255
+to 23. All six aliases now pass at that size.
+
+**Compatibility:** final results are 4420/4710 (93.84%) at 16 px, 4515/4710 (95.86%) at
+48 px and 4630/4710 (98.30%) at 128 px. Against the preceding validated renderer, gains/losses
+are 1/50, 4/0 and 11/0. The 50 regressions represent 17 distinct artworks; manual comparison
+confirms changed small-icon outline coverage. These are not silently accepted exceptions.
+An isolated thin-only build reproduces all 51 changed 16 px results pixel-for-pixel. At 48 px,
+two gains come from each fix; all eleven 128 px gains require the cubic correction.
+All 17 filtered Adwaita icons still pass; hicolor Shotwell retains its 16 px failure (max 33,
+four pixels over 24). The other filtered comparisons pass. Desktop's broad 16 px mismatch
+remains unresolved (max 109, 55/256 pixels over 24). The hairline model remains an approximation:
+an independent analytic circle-area diagnostic does not show uniformly improved error. Fixing
+the demonstrated compositing invariants does not establish exact curved-stroke coverage.
+An exact polygon/pixel intersection probe isolates a further pre-existing limitation: a width-1
+45-degree butt stroke with length `11*sqrt(2)` should cover 15.5563 pixel areas, but both the old
+and new hairline models cover 11.0039 (29.26% short). Its major-axis integration omits the
+normal-width geometry. This is a concrete next correctness target, not evidence that it explains
+all current corpus failures or that correcting it will improve reference agreement.
+
+**Validation:** 51 focused cases / 13,280 assertions pass. Full release ctest passes
+(475 cases / 140,079 assertions, two skipped; 9.44 s), as does ASan/UBSan ctest
+(474 cases / 140,064 assertions, three skipped; 14.20 s), using the approved copy-only fixture
+adaptations. Only the previously documented unrelated isolate zero-length `memcpy` diagnostics
+appear. `nix build --no-link` passes. The final-source clang/libFuzzer ASan/UBSan run completes
+9,891,075 inputs in 1801 seconds, peak RSS 684 MiB, exit 0, with no finding, timeout or OOM.
+The fuzzer has exited and the recorded source/binary hashes still match. Final corpus timing
+with builds and fuzzing stopped is 0.554203, 0.805818 and 2.065165 s at 16/48/128, respectively
+0.898, 0.896 and 1.124 times the preserved baseline; all performance gates pass. No stale
+sources or missing timings, and every final per-image metric matches the candidate report.
+
+**Disposition:** stage 3 remains incomplete and uncommitted. Reaching the unchanged 98% gate
+requires 196 more passes at 16 px and 101 at 48 px, plus the filtered Shotwell comparison.
+Ignored evidence lives in `build-svg-handoff/stroke-union/`, including source/binary hashes,
+geometric probes, before/after reviews, all remaining failures and explicit filtered results.
+The next unresolved problem is the small-size stroke/coverage model, not the two repaired
+invariants. No claim is made that the remaining reference target is impossible.
+
+---
+
+## 2026-11-10 — SVG compatibility audit: distinguish correctness from raster agreement
+
+**Scope:** bounded capture/invariant audit after the author asked whether the reference process
+makes the target impossible. No production renderer, numeric threshold or reference changed;
+resvg was not invoked. Diagnostic scripts and local derivative images remain ignored under
+`build-svg-handoff/compatibility-audit/`, with the full conclusion in `report.txt`.
+
+**Capture:** all 14,130 PNG chunk CRCs validate, all 4,710 SVG source hashes match, all recorded
+capture statuses are zero, and identical source hashes have byte-identical PNGs at each size.
+There are 1,911 distinct artworks. The log has 57 missing-font warnings across 15 corpus sources;
+text is out of scope, and these warnings do not establish the cause of non-text differences.
+Every dimension failure was verified directly from source dimensions as public rounding versus
+reference ceiling: 1/11/7 failures at 16/48/128. These are unavoidable under the current contract,
+but too few by themselves to prevent 98%.
+
+**Demonstrated renderer defects:** original pixel-aligned width-1 line probes show that adding
+a redundant split at a half-pixel lowers alpha from 255 to 192; retracing a translucent stroke
+within the same path raises alpha from 128 to 192. Thin segments are individually composited
+instead of forming one painted stroke union. A separate Musescore probe reproduces alpha 0
+at (95,83) for the full stroke, versus 255 for the relevant isolated cubic. All 256 geometric
+sample points within that pixel lie within the cubic's stroke radius, independently supporting
+coverage. The exact full-path assembly mechanism remains to diagnose. These are not grounds
+for relaxing a reference tolerance. The latter artwork has six failing aliases at 128 px.
+
+**Reference sensitivity:** area-averaging existing 48 px captures down to 16 passes the same
+pixel gate against the existing 16 px captures for 3299/4708 dimension-compatible images
+(70.07%); using 128 px captures gives 1664/4696 (35.43%). This is an auxiliary diagnostic,
+not an acceptance score: rasterization, filtering and compositing need not commute with
+reduction. It explains why increasing geometric precision is not a reliable compatibility fix.
+Desktop's reference 128-to-16 reduction differs from its captured 16 px image by maximum 104
+and 86/256 pixels over 24. Its broad low-resolution mismatch remains unresolved.
+
+**Disposition:** `classified-failures.json` retains all 531 failing size/source pairs: 19 proven
+dimension conflicts, six aliases with demonstrated wide-stroke coverage loss, and 506 unresolved
+differences. No unresolved row is declared harmless or blamed on the oracle. At 48 px, eight
+distinct failing artworks account for 122 failed source paths; aliases remain in the gate.
+`semantic-review.html` and `scale-review.html` show the probes and representative comparisons.
+
+**Decision:** impossibility is not established, nor is an exact pixel oracle a correctness proof.
+The next bounded task is to fix stroke union/coverage semantics and full-path coverage loss with
+geometric invariants, then rerun the unchanged corpus. Avoid further tolerance sweeps first.
+Any later acceptance change should be explicit and tied to named, reviewed exceptions;
+there is not yet evidence for a responsibly calibrated replacement numeric threshold.
+Stage 3 remains incomplete. The prior production-source validation is unchanged.
+
+---
+
+## 2026-11-10 — SVG stage 3: stroke corrections and validation, acceptance still open
+
+**Implemented:** integrated the preserved original stroke-expansion prototype with independent
+corrections. Cubics with coincident endpoint controls use the first nonzero tangent rather than
+the chord. Thin strokes retain caps when zero-length segments precede or follow a real segment;
+mixed degenerate subpaths retain round/square dots, and move-only contours do not paint. Folded
+inner offsets use bounded swept-segment unions: a radius-2 circle with a width-12 stroke no
+longer has a transparent centre. Three original regression cases cover these behaviours.
+FreeType remains responsible for outline decomposition; its unused stroker allocation is gone.
+Existing stage-3 filter, pattern, embedded-image and warning work is preserved.
+
+**Independent assessment:** the preserved prototype baseline reproduced exactly. Correcting the
+endpoint tangent reduces Firefox's 16 px mismatch from 19 pixels over 24 to four. Tighter offset
+fitting and more precise round caps did not consistently improve agreement with the captured
+approximations, so those experiments were not retained. Thin-path coverage accumulation and
+paint/endpoint quantization did not resolve the desktop icon's broad translucent-stroke colour
+mismatch; its exact mechanism remains unresolved. The inner-offset defect was found through
+an original geometric test, not reference tuning. No thresholds, corpus entries or sizing
+contracts changed, and resvg was not run.
+
+**Final corpus:** 4469/4710 (94.88%) at 16 px, 4511/4710 (95.77%) at 48 px, and
+4619/4710 (98.07%) at 128 px. Parse+render totals are 0.528890, 0.760394 and 1.912007 s,
+respectively 0.857, 0.846 and 1.041 times the captured baseline. No stale sources or missing
+timings. Against the retained repository rasterizer, gains/losses are 35/1, 38/6 and 135/43.
+The candidate therefore still has regressions, including small gaps at tight bends. All 17
+filtered Adwaita icons pass at every size. Hicolor Shotwell still fails at 16 px (maximum 33,
+four pixels over 24); all 20 filtered icons pass at 48 and 128 px.
+
+**Validation:** focused SVG tests pass (46 cases / 13,240 assertions). Full release ctest passes
+(472 cases / 140,056 assertions, two skipped; 9.94 s), as does ASan/UBSan ctest (471 cases /
+140,041 assertions, three skipped; 14.23 s), using the approved copy-only package fixture
+adaptations and Mesa software driver. The only sanitizer diagnostics in the full suite are the
+previously documented unrelated null zero-length memcpy calls in isolate helper/protocol code.
+`nix build --no-link` passes. The final-source clang/libFuzzer ASan/UBSan run completes
+10,833,628 inputs in 1801 seconds, peak RSS 570 MiB, exit 0, with no finding, timeout or OOM.
+The fuzzer has exited. Final timing used an immutable executable after builds and fuzzing ended.
+
+**Still open:** stage 3 is not complete and is not committed. Reaching 98% needs 147 additional
+passes at 16 px and 105 at 48 px, plus Shotwell's filtered-subset failure. Local ignored evidence
+is in `build-svg-handoff/agent-evidence/`: `final-corpus.json`, complete per-source
+`remaining-failures.tsv`, `filtered-icons.json`, `regressions.json`, `review.html`, source/binary
+hashes and validation logs. Failure lists distinguish sizing mismatches (1/11/7 by size) from
+unresolved rendering mechanisms; they do not claim every exact cause has been established.
+The review includes improvements and regressions at native size and enlarged. Original
+handoff evidence and before-source snapshots are preserved. No third-party icons or renders
+are staged or committed.
+
+---
+
+## 2026-11-10 — SVG renderer stage 2: groups, clipping and masks
+
+**Done:** group/use opacity composites an offscreen layer once; opaque groups render directly.
+Clip paths support both coordinate systems, clip-rule, child and clip-path transforms, nested
+clips and `use`. Masks support their region and coordinate systems, nested masks, and luminance
+or alpha interpretation. Luminance uses straight colour and applies alpha once. Shape bounds
+include group descendants and referenced viewports. Layers and reference expansion remain
+bounded. Skipping transparent source pixels avoids unnecessary full-canvas blend arithmetic.
+Four captured layer fixtures and exact-pixel cases pass, including a referenced SVG's bounding
+box (its viewport must only be applied once).
+
+**Stroke hardening:** fuzzing found a tiny circle whose distinct fixed-point controls are still
+below FreeType's internal curve tolerance. Manual `EndSubPath` then dereferenced an empty
+border. Stroke subpaths now go through `FT_Stroker_ParseOutline`, which checks whether any
+edge was actually generated before ending the subpath. The minimized original SVG is a unit
+test and seed. The crash replay is clean, as are all existing stroke references. No FreeType
+code was copied or patched.
+
+**Validation:** `nix build --no-link` passes. The complete direct release run passes all 453
+applicable cases / 140,326 assertions (`--order-by=name`, launched from the repository).
+ASan/UBSan ctest passes in 27.06 s. The previously recorded unrelated isolate memcpy UBSan
+messages remain. An initial draft-copy build used stale object files because preserved source
+timestamps predated the objects; the validation copier now updates changed contents with fresh
+timestamps, and affected objects were rebuilt.
+
+**Approved gate exception:** direct release ctest repeatedly fails the existing allocator-state
+assertion at `tests/memory_test.cpp:52` (about 20 MiB resident after a freed allocation). The
+case passes alone; the full binary passes from the repository directory, while changing only
+test order under ctest does not reliably fix it. A single-thread Mesa experiment also triggered
+an unrelated drag/scroll timeout and was not adopted. The author approved accepting the Nix
+package suite plus the complete direct test run for this stage and documenting the limitation.
+No unrelated source or assertions were changed. Existing package fixture adaptations remain
+confined to the validation copy.
+
+**Local corpus:** no stale sources or missing timings. At 16 px, 2606/4710 pass (55.33%),
+0.588958 s versus 0.617100 s (0.954×); at 48 px, 3372/4710 (71.59%), 1.014378 s versus
+0.899150 s (1.128×); at 128 px, 4165/4710 (88.43%), 2.941364 s versus 1.837350 s (1.601×).
+All times are parse+render totals. Final acceptance is not met.
+
+**Fuzzing:** an initial clean run was interrupted before 30 minutes. A restart found the tiny
+curve crash above. After the fix, clang 21 libFuzzer with ASan/UBSan completed 6,103,254 inputs
+in 1801 seconds, with no crash, sanitizer finding, timeout or out-of-memory failure; reported
+RSS was 625 MiB under the 1 GiB cap. This final run completed as a background job and exited.
+
+**Next:** stage 3 is a separate draft under `/tmp`, with colour matrices, blur, pattern tiles and
+embedded images. Its initial feature tests pass, but the corpus remains far below 98%, mostly
+because of small antialiased edge differences. Unsupported-filter logging, further hardening,
+final corpus analysis and the stage 3 gates are still outstanding. No tolerance was relaxed.
+
+---
+
+## 2026-11-10 — SVG renderer stage 1: shapes, paint and structure
+
+**Done:** all path commands (including arcs and compact numbers), the basic SVG shapes,
+FreeType strokes and bounded dash splitting, transforms, viewports and symbols, CSS cascade
+and inheritance, SVG named colours and currentColor, linear/radial gradients and reference
+inheritance, and bounded `use` expansion. Geometry, stylesheet matching, paint expansion,
+coordinate conversion and pixel work have explicit limits. Namespace-local attributes and
+numeric entities work; duplicate XML attributes, non-finite numbers and reference cycles fail
+cleanly. No external resources are opened. The existing icon-theme SVG test is unchanged.
+
+**Raster decision:** use FreeType direct AA spans at four times the output resolution, then
+average coverage before painting. Native-resolution analytic coverage undercounted a
+self-intersecting path (alpha 38 versus reference 160); supersampling makes all 16 stage 1
+reference fixtures pass using the approved premultiplied comparison. This is still an open
+quality/performance tradeoff for small icons, not a claim that final acceptance is met.
+
+**Validation:** `nix build --no-link`, release ctest (20.10 s) and address/undefined sanitizer
+ctest (25.17 s) pass. Direct suites use the approved validation copy and package fixture
+adaptations. Both use the package's Mesa software driver. The sanitizer suite nevertheless
+reports pre-existing zero-length memcpy/null-pointer UBSan findings in
+`src/isolate/src/helper_main.cpp:140` and `src/isolate/src/protocol.cpp:190`; these are outside
+SVG scope and remain unchanged. SVG-only sanitizer fuzzing has no findings.
+
+**Local corpus:** no stale sources or missing timings. At 16 px, 2583/4710 pass (54.84%),
+0.583552 s versus 0.617100 s (0.946×); at 48 px, 3350/4710 (71.13%), 1.003512 s versus
+0.899150 s (1.116×); at 128 px, 4097/4710 (86.99%), 2.901506 s versus 1.837350 s (1.579×).
+These are parse+render totals. Group effects, filters, patterns and images are still pending;
+small-size edge differences also account for many failures. The corpus tool now reports
+failed render timings as missing, rather than assigning an artificial 30 seconds.
+
+**Fuzzing:** the first run found a FreeType stroker crash when a final dash's distinct floating
+endpoints collapsed to the same 26.6 coordinate. Degeneracy checks now use converted points,
+and zero-width strokes skip the stroker. The minimized input is an original regression seed
+and unit test. After the fix, a fresh clang 21 ASan/UBSan libFuzzer run completed 12,601,039
+inputs in 1801 seconds, with no crash, timeout, out-of-memory or sanitizer finding. The replay
+of the original crash is clean.
+
+**Next:** stage 2 has a separately tested draft for group opacity, clip paths and masks. Stages
+2 and 3 have not passed their gates. The final 98% quality and 1.5× speed requirements are not
+yet met; thresholds are unchanged.
+
+---
+
+## 2026-11-10 — SVG renderer stage 0: resvg removed
+
+**Done:** `nordend::svg` now owns SVG icon rendering. The initial implementation tokenizes XML
+with explicit input, node and depth limits and renders solid rectangles through FreeType's
+clipped direct antialiasing spans. It uses premultiplied pixels internally and returns straight
+RGBA. Output is limited to 1024 px; converted coordinates and pixel work are bounded. Failures,
+including allocation errors, return an empty image. No external resources are opened.
+This is deliberately the first piece of stage 1: other geometry and paints are still missing.
+`IconTheme::render` delegates to it; its existing SVG test is unchanged and passes. resvg is
+removed from CMake, the UI library, the Nix package and the README. There is no Rust replacement.
+
+**Tools/tests:** `nordend-svg-render`, `scripts/svg-corpus.sh`, a reference-comparison helper,
+SVG unit tests and `nordend-fuzz-svg` (the original SVG fixtures supply its seeds). The corpus
+script reports missing capture without failing and excludes stale source hashes. Third-party
+icons and renders remain ignored and uncommitted.
+
+**Approved comparison correction:** the author agreed to compare premultiplied RGBA while
+retaining the maximum-channel difference of 64 and the 1% limit for pixels differing by more
+than 24. Straight RGB made nearly transparent antialiased edges fail by 255 for a visible
+contribution of only 1. For example, the stage 1 shapes draft differs by at most 29 in
+premultiplied channels (6/4096 pixels over 24), versus 255 in straight channels. Public output
+and exact-pixel tests remain straight-alpha. The comparison has a regression test for this.
+
+**Validation:** `nix build --no-link` passes without resvg. With the author's approval, direct
+ctest runs in `/tmp/nordend-svg-validation`, a source copy using exactly the existing package's
+MIME, sandbox-probe and sparse-file fixture adjustments. Release ctest passes (20.15 s), as
+does the address/undefined sanitizer suite (14.43 s). The Nix package's `NORDEND_WERROR=OFF`
+setting is needed for an existing ignored-write-return warning in `src/isolate/src/sandbox.cpp`.
+The sanitizer suite also uses the package's software-rendering setup: the first host-driver
+run passed all assertions but reported a 183-byte NVIDIA driver leak; no suppression was added.
+
+**Local corpus, the intentionally incomplete renderer:** 0/4710 pass at each size, no stale
+sources. Parse+render totals: 16 px 0.148186 s (reference 0.617100 s), 48 px 0.303426 s
+(reference 0.899150 s), 128 px 0.162753 s (reference 1.837350 s). These times are not a speed
+claim: most features are not rendered yet. The local JSON lists every mismatch and the script
+prints the worst 20 for each size.
+
+**Fuzzing:** clang 21, libFuzzer with AddressSanitizer and UBSan, 1801 seconds (30 minutes),
+22,872,347 inputs, no crash, timeout, out-of-memory or sanitizer finding. The run's binary
+stayed fixed while the stage 1 tests and code were prepared separately under `/tmp`.
+
+**Next:** integrate and complete stage 1. All 16 stage 1 reference fixtures pass in the draft
+with the approved comparison; coverage supersampling handles self-intersections. Its first
+corpus run still shows mismatches to investigate. Stages 1–3 are not complete.
+
+---
+
+## 2026-11-10 — SVG renderer: reference capture, stage 0 in progress
+
+Work is on `feat/svg-renderer` from `86aa3d3`, with the author's agreement: local `main`
+does not yet contain the icon-theme renderer or Nix packaging that the brief assumes.
+
+**Captured once:** `nix shell nixpkgs#resvg --command bash scripts/svg-capture-references.sh`,
+resvg 0.49.0, 4,710 installed SVG paths at 16, 48 and 128 px (14,130 PNGs), plus 24 original
+hand-written fixtures covering shapes, paths, strokes, CSS, gradients, uses, transforms,
+compositing, clipping, masks, filters and patterns. No render failed. The first discovery
+attempt stopped before invoking resvg on a broken Candy symlink; discovery now records
+unreadable targets separately. The missing target is Candy's `places/16/folder-library.svg`.
+The corpus includes WhiteSur cursor SVGs as well as Candy, Adwaita and both hicolor roots.
+Third-party renders and their manifest are local and ignored; only original fixtures and
+their PNGs belong in Git. The capture refuses to overwrite an existing corpus.
+
+**Baseline:** total CLI wall time (process startup, reading, parsing, rendering and PNG writing)
+is 4.648366 s at 16 px, 5.663249 s at 48 px, and 9.608956 s at 128 px. The retained `--perf`
+log also gives XML parsing + SVG parsing + rendering totals of 0.617100 s, 0.899150 s and
+1.837350 s respectively (each resvg phase is rounded to 0.01 ms). Both measures are in the
+manifest, as `seconds` and `render_seconds`, to keep later comparisons on matching work.
+Source SHA-256 hashes are recorded. The perf column was extracted from the same capture log;
+resvg was not run again. Non-square fixture PNGs retain their aspect ratio.
+
+**Blocked before integration:** the existing build's `nix develop --command ctest --test-dir
+build --output-on-failure` fails before any renderer changes are compiled: 422/425 cases pass,
+three fail, two skipped, 19.21 s. `column_view_test.cpp:334` cannot resolve the `.md` fixture's
+MIME type; `details_view_test.cpp:151` sorts that ambiguous type differently; the transfer
+fixture at `transfer_test.cpp:249` throws when creating a 1 PiB sparse file. `nix/package.nix`
+already adapts these fixtures in its build copy. They are outside SVG scope. The brief requires
+direct ctest to pass at every stage and says to stop on conflicting requirements; the proposal
+is to apply the existing Nix fixture adaptations in a separate validation copy, keeping the
+application and unrelated source tests unchanged.
+
+**Not complete:** resvg is still linked. Initial API/XML and test scaffolding is unintegrated;
+there is no replacement renderer yet. No corpus comparison, sanitizer validation or SVG fuzz
+run has been claimed, and no stage has passed its gates.
+
+---
+
 ## 2026-11-10 — The Noctalia template ships with Nordend
 
 A user on Noctalia saw no Noctalia colours: `colors.toml` is written by a Noctalia user template
