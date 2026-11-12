@@ -1,0 +1,103 @@
+# Nordend's checks on every push to main and every pull request, in a Void Linux container
+# (the system Nordend is made on, with the same libraries). TSan and clang-tidy are run by hand
+# before commits: too slow here. Tests that need the author's raw samples skip themselves.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Build tools and Nordend's libraries (packaging/void/nordend/template), then what the tests
+  # use: doctest, the MIME database, Mesa's software renderer (llvmpipe: the tests that draw
+  # run instead of skipping), a font, LibRaw for the DNG comparison (with LLVM's OpenMP for
+  # clang, which its pkg-config asks for).
+  PACKAGES: >-
+    bash git cmake ninja pkgconf gcc clang21
+    wayland-devel wayland-protocols libglvnd-devel libxkbcommon-devel harfbuzz-devel
+    freetype-devel fontconfig-devel tomlplusplus-devel libwebp-devel libjxl-devel zlib-devel
+    sdbus-c++-devel
+    doctest-devel shared-mime-info mesa-dri dejavu-fonts-ttf libraw-devel libomp-devel
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    container: ghcr.io/void-linux/void-glibc-full:latest
+    steps:
+      - name: Install clang-format
+        run: |
+          xbps-install -Syu xbps
+          xbps-install -Syu git clang21
+      - uses: actions/checkout@v4
+      - name: clang-format
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          /usr/lib/llvm/21/bin/clang-format --version
+          /usr/lib/llvm/21/bin/clang-format --dry-run --Werror \
+            $(git ls-files 'src/*.cpp' 'src/*.hpp' 'tests/*.cpp' 'tests/*.hpp')
+
+  test:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    container:
+      image: ghcr.io/void-linux/void-glibc-full:latest
+      # The preview helper's tests set up its cage (seccomp and landlock) inside the container;
+      # Docker's own seccomp filter must not get in the way. LeakSanitizer stops the process's
+      # threads with ptrace.
+      options: --security-opt seccomp=unconfined --cap-add SYS_PTRACE
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: gcc
+            cc: gcc
+            cxx: g++
+            cmake: -DCMAKE_BUILD_TYPE=Release
+          - name: clang
+            cc: /usr/lib/llvm/21/bin/clang
+            cxx: /usr/lib/llvm/21/bin/clang++
+            cmake: -DCMAKE_BUILD_TYPE=Release
+          - name: asan
+            cc: gcc
+            cxx: g++
+            cmake: -DCMAKE_BUILD_TYPE=Debug -DNORDEND_SANITIZER=address,undefined
+    steps:
+      - name: Install packages
+        run: |
+          xbps-install -Syu xbps
+          xbps-install -Syu $PACKAGES
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          CC=${{ matrix.cc }} CXX=${{ matrix.cxx }} cmake -B build -G Ninja \
+            -DNORDEND_BUILD_TESTS=ON -DNORDEND_WERROR=ON ${{ matrix.cmake }}
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        shell: bash
+        env:
+          # A sanitizer report fails the run instead of scrolling past.
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+          ASAN_OPTIONS: halt_on_error=1
+        run: |
+          # The tests run as root here: run them as a plain user, as people do (the trash, file
+          # permissions and the helper's cage behave differently for root).
+          useradd -m tester
+          chown -R tester build
+          su tester -s /bin/bash -c "UBSAN_OPTIONS=$UBSAN_OPTIONS ASAN_OPTIONS=$ASAN_OPTIONS build/tests/nordend-tests" 2>&1 | tee tests.log
+          status=${PIPESTATUS[0]}
+          if grep -q -E 'runtime error|ERROR: AddressSanitizer|ERROR: LeakSanitizer' tests.log; then
+            echo "::error::sanitizer report in the test log"
+            exit 1
+          fi
+          exit $status
