@@ -48,7 +48,10 @@ TEST_CASE("memory: large blocks go back to the system once freed") {
         CHECK(block.back() == i);
     }
     const nordend::core::MemoryReport after = nordend::core::read_memory_report();
-    CHECK(after.heap_free < before.heap_free + (std::size_t{4} << 20U));  // nothing kept
-    CHECK(after.anonymous < before.anonymous + (std::size_t{8} << 20U));
+    // malloc's own counters, not the process's anonymous memory: another thread still running
+    // from an earlier test (Mesa's software renderer keeps some) may allocate meanwhile.
+    CHECK(after.heap_free < before.heap_free + (std::size_t{4} << 20U));    // nothing kept free
+    CHECK(after.heap_mmapped <= before.heap_mmapped);                       // each unmapped
+    CHECK(after.heap_arena < before.heap_arena + (std::size_t{4} << 20U));  // none in the heap
 #endif
 }
