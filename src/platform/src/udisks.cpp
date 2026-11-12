@@ -9,8 +9,8 @@
 #include <string_view>
 #include <utility>
 
-#include "bus_loop.hpp"
 #include "nordend/core/log.hpp"
+#include "nordend/platform/bus_loop.hpp"
 
 namespace nordend::platform {
 namespace {

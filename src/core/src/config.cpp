@@ -121,6 +121,27 @@ public:
         out = value->get();
     }
 
+    void read_string_list(const toml::node& node, const std::string& path,
+                          std::vector<std::string>& out) {
+        const auto* array = node.as_array();
+        if (array == nullptr) {
+            report(node.source(), std::format("'{}' must be a list of strings, got {}; ignored",
+                                              path, type_name(node)));
+            return;
+        }
+        std::vector<std::string> values;
+        for (const toml::node& item : *array) {
+            const auto* value = item.as_string();
+            if (value == nullptr || value->get().empty()) {
+                report(item.source(),
+                       std::format("'{}' must hold names (strings); this one is ignored", path));
+                continue;
+            }
+            values.push_back(value->get());
+        }
+        out = std::move(values);
+    }
+
     void read_int(const toml::node& node, const std::string& path, int min, int max, int& out) {
         const auto* value = node.as_integer();
         if (value == nullptr) {
@@ -174,6 +195,12 @@ void read_document(const toml::table& root, Reader& reader, Config& config) {
                 node, "icon",
                 {{"follow_accent", [&](const toml::node& value, const std::string& path) {
                       reader.read_bool(value, path, config.icon.follow_accent);
+                  }}});
+        } else if (key.str() == "plugins") {
+            reader.read_section(
+                node, "plugins",
+                {{"disabled", [&](const toml::node& value, const std::string& path) {
+                      reader.read_string_list(value, path, config.plugins.disabled);
                   }}});
         } else {
             reader.report(key.source(),

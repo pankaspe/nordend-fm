@@ -321,7 +321,10 @@ README's [What's next](../README.md#whats-next).
   server that wants a name and a password gets them on a card: user, domain, a password drawn as
   dots, "Anonymous" when the server allows it, and "Remember the password" (gvfs keeps it in the
   keyring). A mounted share has an eject icon that unmounts it; the right click mounts, unmounts and
-  removes the bookmark. Without gvfs a message says so.
+  removes the bookmark. Without gvfs a message says so. This is the `remotes` plugin
+  ([plugins.md](plugins.md)): `[plugins] disabled = ["remotes"]` hides it.
+- **Plugins:** features outside the core are plugins, compiled in and switched off per build
+  (`NORDEND_PLUGIN_<ID>=OFF`) or in `config.toml`; `nordend --about` lists them.
 - **Favourites:** Ctrl+D adds the folder shown, "Add to Sidebar" the folders selected (or the
   folder, from its empty part), and folders dragged onto the "BOOKMARKS" title or below the last
   place are added at the end, a line showing where; dropping onto a place still moves into it.

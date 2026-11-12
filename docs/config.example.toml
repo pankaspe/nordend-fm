@@ -21,3 +21,9 @@ double_click_distance = 4
 # Nordend writes it to ~/.local/share/icons/hicolor/scalable/apps/nordend.svg, where the dock and
 # the launcher look first. false takes it away and leaves the installed icon.
 follow_accent = true
+
+[plugins]
+# Plugins compiled into this build that should not start, by name; read at the next start.
+# "remotes": smb:// and sftp:// bookmarks in the sidebar, mounted through gvfs.
+# nordend --about lists the plugins built in.
+disabled = []

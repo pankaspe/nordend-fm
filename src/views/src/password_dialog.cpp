@@ -5,7 +5,6 @@
 #include <utility>
 #include <xkbcommon/xkbcommon-keysyms.h>
 
-
 namespace nordend::views {
 namespace {
 
@@ -335,8 +334,7 @@ void PasswordDialog::draw(ui::Renderer& renderer, const ui::Rect& bounds,
         rects_.registered = {left, y, half, kModeHeight};
         rects_.anonymous = {left + half, y, half, kModeHeight};
         for (const auto& [rect, chosen, label, target] :
-             {std::tuple{rects_.registered, !anonymous_, "Registered user",
-                         Target::registered},
+             {std::tuple{rects_.registered, !anonymous_, "Registered user", Target::registered},
               std::tuple{rects_.anonymous, anonymous_, "Anonymous", Target::anonymous}}) {
             ui::Color fill =
                 chosen ? palette.secondary_container : palette.surface_container_highest;
@@ -369,8 +367,7 @@ void PasswordDialog::draw(ui::Renderer& renderer, const ui::Rect& bounds,
         for (const auto& [ask, item, label, rect] :
              {std::tuple{request_.ask_user, Item::user, "User", &rects_.user},
               std::tuple{request_.ask_domain, Item::domain, "Domain", &rects_.domain},
-              std::tuple{request_.ask_password, Item::password, "Password",
-                         &rects_.password}}) {
+              std::tuple{request_.ask_password, Item::password, "Password", &rects_.password}}) {
             if (!ask) {
                 continue;
             }
@@ -415,8 +412,8 @@ void PasswordDialog::draw(ui::Renderer& renderer, const ui::Rect& bounds,
             text = connect ? palette.on_primary_container : palette.on_surface;
         }
         renderer.draw_box(button, {.fill = fill, .radius = ui::Corners::all(8.0F)});
-        renderer.draw_text(connect ? "Connect   ↵" : "Cancel   Esc",
-                           button.x + 14.0F, text_y(button), kTextSize, text, button.width - 20.0F);
+        renderer.draw_text(connect ? "Connect   ↵" : "Cancel   Esc", button.x + 14.0F,
+                           text_y(button), kTextSize, text, button.width - 20.0F);
     }
     renderer.pop_clip();
 }

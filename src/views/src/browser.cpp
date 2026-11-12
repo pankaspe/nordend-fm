@@ -3150,7 +3150,8 @@ void Browser::mount_remote(const fs::Place& place, bool open) {
         return;
     }
     if (!remotes_.mount) {
-        show_message(std::format("“{}” could not be mounted: gvfs is not available", place.label),
+        show_message(std::format("“{}” could not be mounted: network folders are not available",
+                                 place.label),
                      true);
         return;
     }
@@ -3179,8 +3180,7 @@ void Browser::mount_remote(const fs::Place& place, bool open) {
                 const std::size_t line = message.find('\n');
                 confirm_.open(message.substr(0, line),
                               line == std::string::npos ? std::string{} : message.substr(line + 1),
-                              choices.front(),
-                              [answer](bool confirmed) {
+                              choices.front(), [answer](bool confirmed) {
                                   answer(confirmed ? std::optional<std::size_t>{0} : std::nullopt);
                               });
             },
@@ -3205,9 +3205,8 @@ void Browser::mount_remote(const fs::Place& place, bool open) {
                            return;
                        }
                        if (!error.empty()) {
-                           show_message(
-                               std::format("“{}” could not be mounted: {}", name, error),
-                               true);
+                           show_message(std::format("“{}” could not be mounted: {}", name, error),
+                                        true);
                            return;
                        }
                        if (open) {

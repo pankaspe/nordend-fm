@@ -27,9 +27,15 @@ struct Config {
         bool follow_accent{true};
     };
 
+    struct Plugins {
+        // Plugins compiled in but not started (their ids: "remotes"); read at start.
+        std::vector<std::string> disabled;
+    };
+
     Font font;
     Pointer pointer;
     Icon icon;
+    Plugins plugins;
 };
 
 struct ConfigResult {
