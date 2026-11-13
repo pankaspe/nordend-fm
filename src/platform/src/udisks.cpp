@@ -141,6 +141,9 @@ struct Udisks::Impl {
     }
 
     void read_objects() {
+        if (bus->lost()) {
+            return;  // a read asked for just before the bus went away
+        }
         manager->callMethodAsync("GetManagedObjects")
             .onInterface("org.freedesktop.DBus.ObjectManager")
             .uponReplyInvoke([this](std::optional<sdbus::Error> error, const ManagedObjects& all) {
@@ -208,7 +211,9 @@ Udisks::Udisks(core::EventLoop& loop, std::function<void()> changed)
 
 Udisks::~Udisks() = default;
 
-bool Udisks::available() const noexcept { return impl_->connection != nullptr; }
+bool Udisks::available() const noexcept {
+    return impl_->connection != nullptr && !impl_->bus->lost();
+}
 
 const std::vector<Volume>& Udisks::volumes() const noexcept { return impl_->volumes; }
 

@@ -17,8 +17,8 @@ BusLoop::~BusLoop() {
 }
 
 void BusLoop::pump() {
-    if (pumping_) {
-        return;  // a callback inside processPendingEvent asked again
+    if (pumping_ || lost_) {
+        return;  // a callback inside processPendingEvent asked again, or nothing to pump
     }
     pumping_ = true;
     try {
@@ -28,7 +28,25 @@ void BusLoop::pump() {
         log::warn("{}: {}", name_, error.getMessage());
     }
     pumping_ = false;
-    watch();
+    try {
+        watch();
+    } catch (const sdbus::Error& error) {
+        // The bus has no socket to watch any more (ENOTCONN once it closed): stop here rather
+        // than let the error out of the loop, which would end Nordend before it saves its state.
+        log::info("{}: the bus went away ({}); no longer following it", name_, error.getMessage());
+        stop();
+    }
+}
+
+void BusLoop::stop() {
+    lost_ = true;
+    loop_.remove(fd_source_);
+    loop_.remove(event_source_);
+    loop_.remove(timeout_);
+    fd_source_ = 0;
+    event_source_ = 0;
+    timeout_ = 0;
+    fd_ = -1;
 }
 
 void BusLoop::watch() {

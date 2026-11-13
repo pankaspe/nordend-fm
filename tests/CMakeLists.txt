@@ -38,6 +38,7 @@ add_executable(nordend-tests
     text_test.cpp
     text_selection_test.cpp
     platform_test.cpp
+    bus_loop_test.cpp
     preview_test.cpp
     quick_look_test.cpp
     rename_test.cpp
@@ -63,9 +64,12 @@ add_executable(nordend-tests
 target_link_libraries(nordend-tests PRIVATE nordend::core nordend::theme nordend::fs nordend::views nordend::picture nordend::formats nordend::formats::image nordend::formats::text nordend::text nordend::thumbs nordend::preview nordend::engines nordend::isolate nordend::platform doctest::doctest nordend::warnings)
 
 # The helper protocol's private header, for its tests; the image family's private readers (TIFF,
-# DNG, lossless JPEG), for theirs.
+# DNG, lossless JPEG), for theirs; platform's BusLoop, for its own.
 target_include_directories(nordend-tests PRIVATE ${PROJECT_SOURCE_DIR}/src/isolate/src
-                                                 ${PROJECT_SOURCE_DIR}/src/formats/image/src)
+                                                 ${PROJECT_SOURCE_DIR}/src/formats/image/src
+                                                 ${PROJECT_SOURCE_DIR}/src/platform/src)
+# BusLoop's test talks to a private dbus-daemon itself.
+target_link_libraries(nordend-tests PRIVATE PkgConfig::SDBUSCPP)
 
 # LibRaw, when installed, as the reference for the DNG reader's values (tests only: never linked
 # into Nordend or its helper).

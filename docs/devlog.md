@@ -4,6 +4,35 @@ Work log, newest first. Each entry: what was done, decisions, measurements, open
 
 ---
 
+## 2026-11-13 — A lost bus is let go (0.6.1)
+
+**Tested by the author** (2026-11-13, VM `nordend-void`, GNOME 48): Nordend open with two tabs
+(one in the grid), logout without closing it. The log: `portal: Failed to process bus requests
+(Connection reset by peer)`, then `portal: the bus went away (Failed to get bus poll data
+(Transport endpoint is not connected)); no longer following it`, then the compositor's end;
+`state.toml` written at the logout with both tabs and the grid.
+
+**Done**
+- At logout GNOME's session bus went before the window: `BusLoop::pump()` caught the bus's
+  error, but `watch()` then asked for the socket again outside the `try`, and ENOTCONN left the
+  loop through main's last `catch`, before `StateKeeper::flush()`: the session's tabs and views
+  were not saved. Now a failing `watch()` stops the `BusLoop` for good (`lost()`): its socket,
+  event fd and timer leave the loop, one line in the log, `pump()` does nothing after. The
+  portal keeps the last colours it had; `Udisks::available()` is false once its bus is lost
+  (mount, unmount and eject answer "udisks2 is not running"), and a read asked for just before
+  does not start.
+- `Udisks::eject` takes its callback by value, as `mount` and `unmount` (a clang-tidy warning in
+  `main.cpp`: the `std::move` there moved nothing).
+- Test: `bus_loop_test.cpp` starts a private `dbus-daemon`, kills it and runs the loop: no
+  exception, `lost()`, under 50 ms of CPU in 200 ms after (no spinning on the closed socket);
+  skipped without `dbus-daemon`. Against the old `BusLoop` it fails with the VM's ENOTCONN.
+
+**Open**
+- The compositor's end is logged as an error (`lost the connection to the compositor`), also at
+  an ordinary logout.
+
+---
+
 ## 2026-11-13 — Rounded corners and a shadow (0.6.1)
 
 **Tested by the author** (2026-11-13, installed build): on Umbriel "funziona tutto" (one
