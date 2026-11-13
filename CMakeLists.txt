@@ -121,6 +121,7 @@ add_subdirectory(src/thumbs)    # freedesktop thumbnail cache
 add_subdirectory(src/preview)   # Quick Look providers: images, text, information
 add_subdirectory(src/isolate)   # preview helpers: the parsers in separate processes (2b)
 add_subdirectory(src/platform)  # default applications (freedesktop), launching processes
+add_subdirectory(src/portal)    # the desktop's file chooser: nordend-portal (ROADMAP 4)
 add_subdirectory(src/views)     # column view and grid
 
 # Renderer test scene (ROADMAP 1.4), shared by the app and nordend-snapshot.
@@ -227,7 +228,7 @@ endif()
 
 # Known third-party leak suppressions, compiled into every executable of a sanitizer build.
 if(NORDEND_SANITIZER)
-    foreach(executable nordend nordend-preview nordend-snapshot nordend-bench-dir nordend-mime
+    foreach(executable nordend nordend-preview nordend-portal nordend-snapshot nordend-bench-dir nordend-mime
             nordend-watch nordend-decode nordend-thumb nordend-open nordend-transfer)
         target_sources(${executable} PRIVATE src/core/src/lsan_suppressions.cpp)
     endforeach()
@@ -240,3 +241,17 @@ install(TARGETS nordend-preview RUNTIME DESTINATION libexec/nordend)
 install(FILES data/nordend.desktop DESTINATION share/applications)
 # Its icon, named after the app id (the desktop entry's Icon=nordend).
 install(FILES data/nordend.svg DESTINATION share/icons/hicolor/scalable/apps)
+# The file chooser (ROADMAP 4): the service in libexec, started by the session bus for
+# xdg-desktop-portal, which finds it by nordend.portal. A desktop uses it once its portals.conf
+# names it: org.freedesktop.impl.portal.FileChooser=nordend.
+install(TARGETS nordend-portal RUNTIME DESTINATION libexec/nordend)
+install(FILES data/nordend.portal DESTINATION share/xdg-desktop-portal/portals)
+# The bus's service file names the service by its full path: written when installing, so it
+# follows `cmake --install --prefix` (and lands under DESTDIR for packages).
+install(CODE [[
+    set(service "org.freedesktop.impl.portal.desktop.nordend.service")
+    set(target "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/share/dbus-1/services/${service}")
+    message(STATUS "Installing: ${target}")
+    file(WRITE "${target}" "[D-BUS Service]\nName=org.freedesktop.impl.portal.desktop.nordend\n"
+                           "Exec=${CMAKE_INSTALL_PREFIX}/libexec/nordend/nordend-portal\n")
+]])

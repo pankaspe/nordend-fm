@@ -3419,6 +3419,10 @@ bool Browser::take_key(const ui::KeyEvent& event, Clock::time_point now) {
         quick_look_.follow(current_folder());
         return handled;
     }
+    if (cancel_ && event.keysym == XKB_KEY_Escape && event.modifiers == ui::Modifiers{}) {
+        cancel_();
+        return true;
+    }
     // What is not listed for the sidebar is nothing there (Space: Quick Look shows the view's
     // entries; F2: the sidebar's places are not renamed).
     const bool ignored = sidebar_.focused() && !listed(event, scope::kSidebar);

@@ -1,4 +1,4 @@
-#include "bus_loop.hpp"
+#include "nordend/platform/bus_loop.hpp"
 
 #include <chrono>
 #include <poll.h>
@@ -47,6 +47,9 @@ void BusLoop::stop() {
     event_source_ = 0;
     timeout_ = 0;
     fd_ = -1;
+    if (lost_handler_) {
+        lost_handler_();
+    }
 }
 
 void BusLoop::watch() {

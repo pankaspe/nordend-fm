@@ -1,6 +1,8 @@
 #pragma once
 
+#include <functional>
 #include <sdbus-c++/sdbus-c++.h>
+#include <utility>
 
 #include "nordend/core/event_loop.hpp"
 
@@ -30,6 +32,9 @@ public:
     // The connection went away: nothing more comes from it, and calls on it fail.
     [[nodiscard]] bool lost() const noexcept { return lost_; }
 
+    // Called once when the connection goes away (a service on the bus has nothing left to do).
+    void set_lost_handler(std::function<void()> lost) { lost_handler_ = std::move(lost); }
+
 private:
     void watch();
     void stop();
@@ -44,6 +49,7 @@ private:
     core::EventLoop::SourceId timeout_{0};
     bool pumping_{false};
     bool lost_{false};
+    std::function<void()> lost_handler_;
 };
 
 }  // namespace nordend::platform

@@ -39,6 +39,7 @@ add_executable(nordend-tests
     text_selection_test.cpp
     platform_test.cpp
     bus_loop_test.cpp
+    portal_service_test.cpp
     preview_test.cpp
     quick_look_test.cpp
     rename_test.cpp
@@ -61,14 +62,13 @@ add_executable(nordend-tests
     undo_test.cpp
     worker_pool_test.cpp
     xcursor_test.cpp)
-target_link_libraries(nordend-tests PRIVATE nordend::core nordend::theme nordend::fs nordend::views nordend::picture nordend::formats nordend::formats::image nordend::formats::text nordend::text nordend::thumbs nordend::preview nordend::engines nordend::isolate nordend::platform doctest::doctest nordend::warnings)
+target_link_libraries(nordend-tests PRIVATE nordend::core nordend::theme nordend::fs nordend::views nordend::picture nordend::formats nordend::formats::image nordend::formats::text nordend::text nordend::thumbs nordend::preview nordend::engines nordend::isolate nordend::platform nordend::portal doctest::doctest nordend::warnings)
 
 # The helper protocol's private header, for its tests; the image family's private readers (TIFF,
-# DNG, lossless JPEG), for theirs; platform's BusLoop, for its own.
+# DNG, lossless JPEG), for theirs.
 target_include_directories(nordend-tests PRIVATE ${PROJECT_SOURCE_DIR}/src/isolate/src
-                                                 ${PROJECT_SOURCE_DIR}/src/formats/image/src
-                                                 ${PROJECT_SOURCE_DIR}/src/platform/src)
-# BusLoop's test talks to a private dbus-daemon itself.
+                                                 ${PROJECT_SOURCE_DIR}/src/formats/image/src)
+# BusLoop's and the portal's tests talk to a private dbus-daemon themselves.
 target_link_libraries(nordend-tests PRIVATE PkgConfig::SDBUSCPP)
 
 # LibRaw, when installed, as the reference for the DNG reader's values (tests only: never linked

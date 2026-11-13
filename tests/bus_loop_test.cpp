@@ -1,6 +1,6 @@
 // BusLoop when its bus goes away, as the session bus does at logout before Nordend's window
 // closes: it stops following the bus, and the loop carries on (and Nordend saves its state).
-#include "bus_loop.hpp"
+#include "nordend/platform/bus_loop.hpp"
 
 #include <cerrno>
 #include <chrono>
@@ -20,67 +20,16 @@
 #include <doctest/doctest.h>
 
 #include "nordend/core/event_loop.hpp"
+#include "private_bus.hpp"
 #include "temp_dir.hpp"
 
 using nordend::core::EventLoop;
 using nordend::platform::BusLoop;
+using nordend::test::PrivateBus;
 using nordend::test::TempDir;
 using namespace std::chrono_literals;
 
-extern char** environ;  // NOLINT(readability-redundant-declaration): for posix_spawnp
-
 namespace {
-
-// A private dbus-daemon listening on socket, or none when dbus-daemon is not installed.
-class PrivateBus {
-public:
-    explicit PrivateBus(const std::filesystem::path& socket) {
-        const std::string address = "--address=unix:path=" + socket.string();
-        std::vector<std::string> args{"dbus-daemon", "--session", "--nofork", address};
-        std::vector<char*> argv;
-        argv.reserve(args.size() + 1);
-        for (std::string& arg : args) {
-            argv.push_back(arg.data());
-        }
-        argv.push_back(nullptr);
-        posix_spawn_file_actions_t actions{};
-        posix_spawn_file_actions_init(&actions);
-        posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0);
-        posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
-        if (posix_spawnp(&pid_, "dbus-daemon", &actions, nullptr, argv.data(), environ) != 0) {
-            pid_ = -1;
-        }
-        posix_spawn_file_actions_destroy(&actions);
-        for (int i = 0; pid_ > 0 && i < 500 && !std::filesystem::exists(socket); ++i) {
-            usleep(10'000);
-        }
-        if (pid_ > 0 && !std::filesystem::exists(socket)) {
-            kill();
-        }
-    }
-
-    ~PrivateBus() { kill(); }
-
-    PrivateBus(const PrivateBus&) = delete;
-    PrivateBus& operator=(const PrivateBus&) = delete;
-    PrivateBus(PrivateBus&&) = delete;
-    PrivateBus& operator=(PrivateBus&&) = delete;
-
-    [[nodiscard]] bool running() const { return pid_ > 0; }
-
-    void kill() {
-        if (pid_ > 0) {
-            ::kill(pid_, SIGKILL);
-            int status = 0;
-            while (waitpid(pid_, &status, 0) < 0 && errno == EINTR) {
-            }
-            pid_ = -1;
-        }
-    }
-
-private:
-    pid_t pid_{-1};
-};
 
 bool run_until(EventLoop& loop, const std::function<bool()>& done) {
     const auto poll = loop.add_timer(1ms, 1ms, [&] {

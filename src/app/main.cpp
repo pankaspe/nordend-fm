@@ -1,6 +1,7 @@
 #include <GLES3/gl3.h>
 #include <algorithm>
 #include <array>
+#include <cerrno>
 #include <charconv>
 #include <chrono>
 #include <csignal>
@@ -26,6 +27,7 @@
 
 #include "nordend/core/config.hpp"
 #include "nordend/core/event_loop.hpp"
+#include "nordend/core/file.hpp"
 #include "nordend/core/file_watcher.hpp"
 #include "nordend/core/log.hpp"
 #include "nordend/core/memory.hpp"
@@ -197,7 +199,11 @@ const char* button_name(ui::PointerButton button) {
 
 constexpr const char* kUsage =
     "usage: nordend [--config FILE] [--check-config] [--test-scene] [--version] [--about] [DIR]\n"
+    "       nordend --pick [--multiple] [--title TEXT] [DIR]\n"
     "  DIR             the folder to show (default: your home folder)\n"
+    "  --pick          choose a file (Enter) and print its file:// URI; Escape cancels\n"
+    "  --multiple      with --pick: the selected files, one URI a line\n"
+    "  --title TEXT    with --pick: the window's title\n"
     "  --config FILE   read FILE instead of ~/.config/nordend/config.toml\n"
     "  --test-scene    show the renderer test scene instead of a folder\n"
     "  --check-config  report problems in the config file and exit (status 1 if any)\n"
@@ -263,6 +269,27 @@ int print_about() {
     return 0;
 }
 
+// What --pick prints: one file:// URI a line, written at once. false when it could not be written.
+bool print_choice(const std::filesystem::path& directory, const std::vector<fs::Entry>& files) {
+    std::string out;
+    for (const fs::Entry& entry : files) {
+        out += core::file_uri(directory / entry.name);
+        out += '\n';
+    }
+    std::string_view rest{out};
+    while (!rest.empty()) {
+        const ssize_t written = write(STDOUT_FILENO, rest.data(), rest.size());
+        if (written < 0 && errno == EINTR) {
+            continue;
+        }
+        if (written <= 0) {
+            return false;
+        }
+        rest.remove_prefix(static_cast<std::size_t>(written));
+    }
+    return true;
+}
+
 // --check-config: every problem on stderr, a one-line verdict on stdout.
 int check_config(const std::filesystem::path& path, const core::ConfigResult& result) {
     for (const std::string& problem : result.problems) {
@@ -286,6 +313,10 @@ int main(int argc, char** argv) {
     std::filesystem::path start_dir;
     bool check_only = false;
     bool test_scene = false;
+    // --pick: choosing files for an application (ROADMAP 4, the portal's picker).
+    bool pick = false;
+    bool pick_multiple = false;
+    std::string pick_title;
     for (int i = 1; i < argc; ++i) {
         const std::string_view arg{argv[i]};
         if (arg == "--version") {
@@ -299,6 +330,16 @@ int main(int argc, char** argv) {
             check_only = true;
         } else if (arg == "--test-scene") {
             test_scene = true;
+        } else if (arg == "--pick") {
+            pick = true;
+        } else if (arg == "--multiple") {
+            pick_multiple = true;
+        } else if (arg == "--title") {
+            if (i + 1 == argc) {
+                std::fprintf(stderr, "nordend: --title needs a text\n%s", kUsage);
+                return 2;
+            }
+            pick_title = argv[++i];
         } else if (arg == "--config") {
             if (i + 1 == argc) {
                 std::fprintf(stderr, "nordend: --config needs a file\n%s", kUsage);
@@ -311,6 +352,14 @@ int main(int argc, char** argv) {
             std::fprintf(stderr, "nordend: unknown option '%s'\n%s", argv[i], kUsage);
             return 2;
         }
+    }
+    if ((pick_multiple || !pick_title.empty()) && !pick) {
+        std::fprintf(stderr, "nordend: --multiple and --title go with --pick\n%s", kUsage);
+        return 2;
+    }
+    if (pick && test_scene) {
+        std::fprintf(stderr, "nordend: --pick shows a folder, not the test scene\n%s", kUsage);
+        return 2;
     }
     if (config_path.empty()) {
         config_path = core::default_config_path();
@@ -393,11 +442,17 @@ int main(int argc, char** argv) {
         for (const std::string& problem : remembered.problems) {
             log::warn("state: {}", problem);
         }
+        std::string window_title = "Nordend";
+        if (!pick_title.empty()) {
+            window_title = pick_title;
+        } else if (pick) {
+            window_title = pick_multiple ? "Choose Files" : "Choose a File";
+        }
         ui::Window window{
             display,
             egl,
             fonts,
-            {.title = "Nordend",
+            {.title = window_title,
              .app_id = "nordend",
              .width = remembered.state.window_width,
              .height = remembered.state.window_height,
@@ -480,6 +535,9 @@ int main(int argc, char** argv) {
         std::int32_t restored_width = remembered.state.window_width;
         std::int32_t restored_height = remembered.state.window_height;
         const auto note_state = [&] {
+            if (pick) {
+                return;  // a picker leaves the tabs and the window as Nordend left them
+            }
             const ui::WindowState& shown = window.state();
             if (!shown.maximized && !shown.fullscreen && !shown.tiled_left && !shown.tiled_right &&
                 !shown.tiled_top && !shown.tiled_bottom) {
@@ -510,10 +568,32 @@ int main(int argc, char** argv) {
                     activation.request(display.seat(), seat.input_serial(), window.surface(),
                                        std::move(done));
                 });
-            columns->set_open_handler(
-                [&](const std::filesystem::path& directory, std::vector<fs::Entry> files) {
-                    opener->open(directory, std::move(files));
+            if (pick) {
+                // Enter on a file chooses it (the selection with --multiple); folders open.
+                columns->set_open_handler([&](const std::filesystem::path& directory,
+                                              const std::vector<fs::Entry>& files) {
+                    if (!pick_multiple && files.size() > 1) {
+                        columns->show_message("Choose one file", false);
+                        return;
+                    }
+                    if (!print_choice(directory, files)) {
+                        log::error("pick: cannot write the choice");
+                        loop.quit(2);
+                        return;
+                    }
+                    log::info("pick: {} file(s) chosen", files.size());
+                    loop.quit(0);
                 });
+                columns->set_cancel_handler([&] {
+                    log::info("pick: cancelled");
+                    loop.quit(0);  // nothing printed: 1 is for errors
+                });
+            } else {
+                columns->set_open_handler(
+                    [&](const std::filesystem::path& directory, std::vector<fs::Entry> files) {
+                        opener->open(directory, std::move(files));
+                    });
+            }
             columns->set_open_with_handlers(
                 [&](const std::filesystem::path& directory, fs::Entry entry,
                     std::function<void(std::vector<views::Browser::AppChoice>)> done) {
@@ -599,7 +679,7 @@ int main(int argc, char** argv) {
             columns->apply(remembered.state);
             // Without a folder (Super+E) the tabs come back as they were left; with one
             // (xdg-open, "Show in folder") a single tab on it (ROADMAP 9.1d).
-            if (!start_dir.empty() ||
+            if (pick || !start_dir.empty() ||
                 !columns->restore_tabs(remembered.state.tabs, remembered.state.shown_tab)) {
                 columns->open(start_folder(start_dir));
             }

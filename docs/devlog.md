@@ -4,6 +4,67 @@ Work log, newest first. Each entry: what was done, decisions, measurements, open
 
 ---
 
+## 2026-11-13 — The file chooser service (ROADMAP 4a)
+
+**Tested by the author** (2026-11-13, `~/.local`, Umbriel): `nordend --pick` alone (one file,
+three with `--multiple` in listing order, `tre%20con%20spazi.txt`, "Choose one file" keeping the
+window open, Escape → status 0 and nothing printed; the title, seen with Super+W, "Choose a
+File"); `gdbus call … OpenFile` on the session bus, the service started by D-Bus (a choice →
+response 0 with the URI, Escape → 1), gone after 30 s. Then Firefox (`widget.use-xdg-desktop-
+portal.file-picker = 1`) with xdg-desktop-portal 1.22.1 started by hand on a folder holding
+`nordend.portal` and links to `gtk.portal` and `umbriel.portal`: Ctrl+O opened Nordend as the
+chooser and the file chosen opened in Firefox; its log said "Using nordend.portal for
+org.freedesktop.impl.portal.FileChooser (interface specific config)".
+
+**Done**
+- `nordend-portal` (libexec, 0.23 MiB stripped): the FileChooser backend for
+  xdg-desktop-portal. It owns `org.freedesktop.impl.portal.desktop.nordend` on the session bus
+  and exports `org.freedesktop.impl.portal.FileChooser` at `/org/freedesktop/portal/desktop`,
+  on our `EventLoop` through `BusLoop` (sdbus-c++, no thread of its own). `OpenFile` answers
+  asynchronously: it exports `org.freedesktop.impl.portal.Request` at the call's handle
+  (`Close` stops the picker) and starts one `nordend --pick` per request. `SaveFile`,
+  `SaveFiles` and `directory` (choosing folders) answer 2 ("other") for now: 4c and 4b. The
+  service closes after 30 s without a request, or when the bus goes away
+  (`BusLoop::set_lost_handler`, new).
+- `src/portal/` (`nordend::portal`): `open_file_request` (multiple, directory,
+  `current_folder` as a NUL-ended `ay`, options of another type left out), `picker_arguments`,
+  `pick_result`, `Picker` (posix_spawn with a clean signal mask, stdout on a pipe read as it
+  comes, the end followed by a pidfd so a program the picker started cannot hold the answer;
+  SIGTERM on Close, SIGKILL 3 s later), `FileChooser`, `default_picker()`
+  (`<prefix>/libexec/nordend/` → `<prefix>/bin/nordend`; the build tree's `nordend` beside it).
+- `nordend --pick [--multiple] [--title TEXT] [DIR]`: Enter (or a double click) on a file prints
+  its `file://` URI on stdout and closes; with `--multiple` the selection, one URI a line;
+  without it, two or more selected say "Choose one file". Escape cancels: status 0 and nothing
+  printed (1 stays nordend's error, which the service answers as "other"). The window is titled
+  after the request ("Choose a File" / "Choose Files" without one); the picker opens one tab on
+  DIR (else home) and never writes `state.toml`. `Browser::set_cancel_handler`: Escape cancels
+  once nothing on screen takes it (menu, dialog, Quick Look, shortcuts).
+- Installed: `share/xdg-desktop-portal/portals/nordend.portal` and the bus's service file
+  `share/dbus-1/services/org.freedesktop.impl.portal.desktop.nordend.service`, written at
+  install time so `Exec=` follows `--prefix` (and DESTDIR for packages).
+- `BusLoop`'s header is public now (`nordend/platform/bus_loop.hpp`); the tests' private
+  dbus-daemon moved to `tests/private_bus.hpp`.
+- Tests (457): the options and the picker's output/status; on a private bus with a shell script
+  as the picker, a choice (arguments checked, idle after), Escape, a crash, no program, Close
+  (answered within 2 s, by SIGTERM), folders/SaveFile/SaveFiles; Escape with and without a
+  cancel handler. Tried by hand: `build/nordend-portal` on a private bus answered `gdbus call
+  … OpenFile` with `(uint32 0, {'uris': <['file:///tmp/foto%20uno.ORF']>})`.
+
+**Decisions**
+- A separate process per request (crash isolation, nothing in memory when idle), as approved.
+- A picker's URIs count only with a clean exit; stray stdout lines that are not `file://` are
+  left out.
+
+**Open**
+- xdg-desktop-portal 1.22 looks for `.portal` files in its data dir only: an install in
+  `~/.local` is not found by it, so daily use needs the package (`/usr`). With
+  `XDG_DESKTOP_PORTAL_DIR` set, both the `.portal` files and `<desktop>-portals.conf` are read
+  from that folder alone (checked: `~/.config/xdg-desktop-portal` was ignored then, and every
+  interface fell back to gtk "as a last resort" until the conf sat beside the `.portal` files).
+- No parent window yet (xdg-foreign), no filters shown, no folders: 4b.
+
+---
+
 ## 2026-11-13 — Nordend 0.6.2
 
 A patch release with issue #9 (Evergaster): Ctrl+Shift+C copies the shown folder's path, and

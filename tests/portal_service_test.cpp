@@ -1,0 +1,287 @@
+// The file chooser service (ROADMAP 4a): OpenFile's options, the picker's command line and
+// output, and the whole round on a private bus with a made-up picker in place of nordend --pick.
+#include <chrono>
+#include <csignal>
+#include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <functional>
+#include <map>
+#include <memory>
+#include <optional>
+#include <sdbus-c++/sdbus-c++.h>
+#include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include <doctest/doctest.h>
+
+#include "nordend/core/event_loop.hpp"
+#include "nordend/platform/bus_loop.hpp"
+#include "nordend/portal/file_chooser.hpp"
+#include "private_bus.hpp"
+#include "temp_dir.hpp"
+
+namespace portal = nordend::portal;
+using nordend::core::EventLoop;
+using nordend::platform::BusLoop;
+using nordend::test::PrivateBus;
+using nordend::test::TempDir;
+using namespace std::chrono_literals;
+
+namespace {
+
+int exited(int code) { return code << 8; }  // as waitpid() puts an exit status
+
+std::vector<std::uint8_t> bytes(const std::string& text) {
+    std::vector<std::uint8_t> out(text.begin(), text.end());
+    out.push_back(0);
+    return out;
+}
+
+bool run_until(EventLoop& loop, const std::function<bool()>& done) {
+    const auto poll = loop.add_timer(1ms, 1ms, [&] {
+        if (done()) {
+            loop.quit(0);
+        }
+    });
+    const auto watchdog = loop.add_timer(5s, 0ms, [&loop] { loop.quit(1); });
+    const int code = loop.run();
+    loop.remove(poll);
+    loop.remove(watchdog);
+    return code == 0;
+}
+
+std::string read_file(const std::filesystem::path& path) {
+    std::ifstream in{path};
+    std::stringstream text;
+    text << in.rdbuf();
+    return text.str();
+}
+
+// A service on a private bus and a client calling it, both on one loop.
+struct Round {
+    TempDir dir;
+    std::filesystem::path socket{dir.path / "bus"};
+    PrivateBus daemon{socket};
+    EventLoop loop;
+    std::unique_ptr<sdbus::IConnection> service;
+    std::unique_ptr<BusLoop> service_bus;
+    std::unique_ptr<portal::FileChooser> chooser;
+    std::unique_ptr<sdbus::IConnection> client;
+    std::unique_ptr<BusLoop> client_bus;
+    std::unique_ptr<sdbus::IProxy> proxy;
+
+    // The made-up picker: a shell script with body, its arguments written to "args".
+    void start(const std::string& body) {
+        const std::filesystem::path program = dir.path / "picker";
+        {
+            std::ofstream out{program};
+            out << "#!/bin/sh\nprintf '%s\\n' \"$@\" > '" << (dir.path / "args").string() << "'\n"
+                << body << "\n";
+        }
+        std::filesystem::permissions(program, std::filesystem::perms::owner_all);
+        start_with(program);
+    }
+
+    void start_with(const std::filesystem::path& program) {
+        const std::string address = "unix:path=" + socket.string();
+        service = sdbus::createSessionBusConnectionWithAddress(address);
+        service_bus = std::make_unique<BusLoop>(loop, *service, "service");
+        chooser = std::make_unique<portal::FileChooser>(loop, *service, *service_bus, program);
+        service->requestName(sdbus::ServiceName{std::string{portal::kBusName}});
+        service_bus->pump();
+        client = sdbus::createSessionBusConnectionWithAddress(address);
+        client_bus = std::make_unique<BusLoop>(loop, *client, "client");
+        proxy = sdbus::createProxy(*client, sdbus::ServiceName{std::string{portal::kBusName}},
+                                   sdbus::ObjectPath{std::string{portal::kObjectPath}});
+    }
+
+    struct Answer {
+        bool arrived{false};
+        std::optional<std::string> error;
+        std::uint32_t response{99};
+        portal::Options results;
+    };
+
+    std::shared_ptr<Answer> call(const char* method, const std::string& handle,
+                                 const portal::Options& options) const {
+        auto answer = std::make_shared<Answer>();
+        proxy->callMethodAsync(method)
+            .onInterface(std::string{portal::kFileChooser})
+            .withArguments(sdbus::ObjectPath{handle}, std::string{"org.example.App"}, std::string{},
+                           std::string{"Open a Photo"}, options)
+            .uponReplyInvoke([answer](std::optional<sdbus::Error> error, std::uint32_t response,
+                                      portal::Options results) {
+                answer->arrived = true;
+                if (error) {
+                    answer->error = error->getMessage();
+                    return;
+                }
+                answer->response = response;
+                answer->results = std::move(results);
+            });
+        client_bus->pump();
+        return answer;
+    }
+
+    void close(const std::string& handle) const {
+        const std::unique_ptr<sdbus::IProxy> request = sdbus::createProxy(
+            *client, sdbus::ServiceName{std::string{portal::kBusName}}, sdbus::ObjectPath{handle});
+        request->callMethodAsync("Close")
+            .onInterface(std::string{portal::kRequest})
+            .uponReplyInvoke([](const std::optional<sdbus::Error>& /*error*/) {});
+        client_bus->pump();
+    }
+
+    [[nodiscard]] std::string arguments() const { return read_file(dir.path / "args"); }
+};
+
+std::vector<std::string> uris_of(const portal::Options& results) {
+    const auto it = results.find("uris");
+    return it == results.end() ? std::vector<std::string>{}
+                               : it->second.get<std::vector<std::string>>();
+}
+
+constexpr const char* kHandle = "/org/freedesktop/portal/desktop/request/1_42/t1";
+
+}  // namespace
+
+TEST_CASE("portal: OpenFile's options as the picker follows them") {
+    portal::Options options;
+    options.emplace("multiple", sdbus::Variant{true});
+    options.emplace("current_folder", sdbus::Variant{bytes("/home/me/Pictures")});
+    options.emplace("accept_label", sdbus::Variant{std::string{"_Open"}});
+    const portal::PickRequest request = portal::open_file_request("Open a Photo", options);
+    CHECK(request.title == "Open a Photo");
+    CHECK(request.multiple);
+    CHECK_FALSE(request.directory);
+    CHECK(request.folder == "/home/me/Pictures");
+    CHECK(portal::picker_arguments(request) == std::vector<std::string>{"--pick", "--multiple",
+                                                                        "--title", "Open a Photo",
+                                                                        "/home/me/Pictures"});
+
+    SUBCASE("nothing asked: one file, the picker's own folder and title") {
+        const portal::PickRequest plain = portal::open_file_request("", {});
+        CHECK_FALSE(plain.multiple);
+        CHECK(plain.folder.empty());
+        CHECK(portal::picker_arguments(plain) == std::vector<std::string>{"--pick"});
+    }
+    SUBCASE("options of another type, and folders that are not absolute paths, are left out") {
+        portal::Options odd;
+        odd.emplace("multiple", sdbus::Variant{std::string{"yes"}});
+        odd.emplace("directory", sdbus::Variant{std::uint32_t{1}});
+        odd.emplace("current_folder", sdbus::Variant{bytes("relative/folder")});
+        const portal::PickRequest left = portal::open_file_request("", odd);
+        CHECK_FALSE(left.multiple);
+        CHECK_FALSE(left.directory);
+        CHECK(left.folder.empty());
+        odd.erase("current_folder");
+        odd.emplace("current_folder", sdbus::Variant{std::string{"/as/a/string"}});
+        CHECK(portal::open_file_request("", odd).folder.empty());
+    }
+    SUBCASE("folders") {
+        portal::Options folders;
+        folders.emplace("directory", sdbus::Variant{true});
+        CHECK(portal::open_file_request("", folders).directory);
+    }
+}
+
+TEST_CASE("portal: the picker's output and status make the answer") {
+    const std::string output = "a stray line\nfile:///home/me/a%20b.jpg\nfile:///home/me/c.ORF\n";
+    portal::PickResult chosen = portal::pick_result(output, exited(0));
+    CHECK(chosen.response == portal::kResponseOk);
+    CHECK(chosen.uris ==
+          std::vector<std::string>{"file:///home/me/a%20b.jpg", "file:///home/me/c.ORF"});
+    // The last line without its newline still counts.
+    CHECK(portal::pick_result("file:///x", exited(0)).uris ==
+          std::vector<std::string>{"file:///x"});
+
+    CHECK(portal::pick_result("", exited(0)).response == portal::kResponseCancelled);
+    // 1 is nordend's error (no display, say), not a cancel.
+    CHECK(portal::pick_result("", exited(1)).response == portal::kResponseOther);
+    CHECK(portal::pick_result("", SIGTERM).response == portal::kResponseCancelled);
+    // URIs from a picker that did not end well are not trusted.
+    const portal::PickResult crashed = portal::pick_result(output, SIGSEGV);
+    CHECK(crashed.response == portal::kResponseOther);
+    CHECK(crashed.uris.empty());
+    CHECK(portal::pick_result(output, exited(2)).response == portal::kResponseOther);
+    CHECK(portal::pick_result(output, exited(1)).response == portal::kResponseOther);
+}
+
+TEST_CASE("portal: OpenFile on the bus runs the picker and answers with its choice") {
+    Round round;
+    if (!round.daemon.running()) {
+        MESSAGE("no dbus-daemon: skipped");
+        return;
+    }
+    SUBCASE("a choice") {
+        round.start("printf 'file:///tmp/a%%20b.jpg\\nfile:///tmp/c.txt\\n'");
+        portal::Options options;
+        options.emplace("multiple", sdbus::Variant{true});
+        options.emplace("current_folder", sdbus::Variant{bytes("/tmp")});
+        bool idle = false;
+        round.chooser->set_idle_handler(50ms, [&idle] { idle = true; });
+        const auto answer = round.call("OpenFile", kHandle, options);
+        REQUIRE(run_until(round.loop, [&] { return answer->arrived; }));
+        CHECK_FALSE(answer->error);
+        CHECK(answer->response == portal::kResponseOk);
+        CHECK(uris_of(answer->results) ==
+              std::vector<std::string>{"file:///tmp/a%20b.jpg", "file:///tmp/c.txt"});
+        CHECK(round.arguments() == "--pick\n--multiple\n--title\nOpen a Photo\n/tmp\n");
+        CHECK(round.chooser->pending() == 0);
+        // Nothing more asked: the service may go.
+        CHECK(run_until(round.loop, [&] { return idle; }));
+    }
+    SUBCASE("Escape in the picker: nothing printed") {
+        round.start("exit 0");
+        const auto answer = round.call("OpenFile", kHandle, {});
+        REQUIRE(run_until(round.loop, [&] { return answer->arrived; }));
+        CHECK(answer->response == portal::kResponseCancelled);
+        CHECK(answer->results.empty());
+    }
+    SUBCASE("a picker that crashes") {
+        round.start("printf 'file:///tmp/half\\n'; kill -SEGV $$");
+        const auto answer = round.call("OpenFile", kHandle, {});
+        REQUIRE(run_until(round.loop, [&] { return answer->arrived; }));
+        CHECK(answer->response == portal::kResponseOther);
+        CHECK(answer->results.empty());
+    }
+    SUBCASE("no picker to start") {
+        round.start_with(round.dir.path / "missing");
+        const auto answer = round.call("OpenFile", kHandle, {});
+        REQUIRE(run_until(round.loop, [&] { return answer->arrived; }));
+        CHECK(answer->response == portal::kResponseOther);
+        CHECK(round.chooser->pending() == 0);
+    }
+    SUBCASE("the application closes the request: the picker is closed, the answer a cancel") {
+        round.start("exec sleep 30");
+        const auto answer = round.call("OpenFile", kHandle, {});
+        REQUIRE(run_until(round.loop, [&] {
+            return round.chooser->pending() == 1 &&
+                   std::filesystem::exists(round.dir.path / "args");
+        }));
+        CHECK_FALSE(answer->arrived);
+        round.close(kHandle);
+        const auto before = std::chrono::steady_clock::now();
+        REQUIRE(run_until(round.loop, [&] { return answer->arrived; }));
+        CHECK(std::chrono::steady_clock::now() - before < 2s);  // SIGTERM, not the kill later
+        CHECK(answer->response == portal::kResponseCancelled);
+        CHECK(round.chooser->pending() == 0);
+    }
+    SUBCASE("folders and saving are not there yet: \"other\", without a picker") {
+        round.start("printf 'file:///tmp/x\\n'");
+        portal::Options folders;
+        folders.emplace("directory", sdbus::Variant{true});
+        const auto folder = round.call("OpenFile", kHandle, folders);
+        const auto save = round.call("SaveFile", kHandle, {});
+        const auto saves = round.call("SaveFiles", kHandle, {});
+        REQUIRE(run_until(round.loop,
+                          [&] { return folder->arrived && save->arrived && saves->arrived; }));
+        CHECK(folder->response == portal::kResponseOther);
+        CHECK(save->response == portal::kResponseOther);
+        CHECK(saves->response == portal::kResponseOther);
+        CHECK_FALSE(std::filesystem::exists(round.dir.path / "args"));
+    }
+}

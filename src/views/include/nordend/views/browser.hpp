@@ -466,6 +466,10 @@ public:
     // Quits Nordend (the palette's "Quit"; Ctrl+Q is the app's). Without one, no "Quit".
     void set_quit_handler(std::function<void()> quit) { quit_ = std::move(quit); }
 
+    // Choosing files for an application (nordend --pick): Escape, once nothing on screen takes
+    // it (a menu, a dialog, Quick Look), cancels instead of clearing the selection.
+    void set_cancel_handler(std::function<void()> cancel) { cancel_ = std::move(cancel); }
+
     // "New File": makes name (from a template when from is set) in the folder shown, puts the
     // cursor on it and edits its name.
     void new_file(const std::string& name, const std::filesystem::path& from);
@@ -702,6 +706,7 @@ private:
 
     std::optional<FoundAfter> found_after_;
     std::function<void()> quit_;
+    std::function<void()> cancel_;
     std::uint64_t menu_generation_{0};  // a submenu found late fills only the menu it was for
     std::size_t menu_loads_{0};         // applications and templates being looked for
     std::vector<std::function<void()>> menu_loaders_;  // started once the menu is open
