@@ -249,7 +249,7 @@ void Udisks::unmount(const std::string& volume, Done done) {
     impl_->pump();
 }
 
-void Udisks::eject(const std::string& volume, const Done& done) {
+void Udisks::eject(const std::string& volume, Done done) {
     if (!available()) {
         done("udisks2 is not running");
         return;
@@ -266,7 +266,7 @@ void Udisks::eject(const std::string& volume, const Done& done) {
     const std::string drive = it->drive;
     // One after the other, then the drive; the first error stops it.
     auto next = std::make_shared<std::function<void(std::size_t)>>();
-    *next = [this, mounted, drive, done, next](std::size_t index) {
+    *next = [this, mounted, drive, done = std::move(done), next](std::size_t index) {
         if (index < mounted.size()) {
             unmount(mounted[index], [done, next, index](const std::string& error) {
                 if (!error.empty()) {

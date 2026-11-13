@@ -44,7 +44,7 @@ public:
 
     // Unmounts every file system on volume's drive, then powers the drive off (or ejects its
     // medium): it can be unplugged then.
-    void eject(const std::string& volume, const Done& done);
+    void eject(const std::string& volume, Done done);
 
 private:
     struct Impl;
