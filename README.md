@@ -17,23 +17,20 @@
   <img src="https://img.shields.io/badge/license-MIT-3DA639" alt="MIT license">
 </p>
 
-> [!NOTE]
-> **Young software, used every day by its author.** Since 0.5.0 Nordend opens **text files** in
-> Quick Look with **syntax colours** for over twenty languages (code, configuration, Markdown,
-> diffs), to select and copy; read, like pictures since 0.4.0, by Nordend's own code in a
-> **caged helper process**. 0.6 **follows your theme's colours by itself**, as GTK apps do,
-> and draws **one header**: the path, back and forward and the window's buttons in one row;
-> 0.6.1 gives it **rounded corners and a shadow** (or square ones), and a see-through
-> background if you want one.
-> On Void Linux, [install it as a package](#on-void-linux); on NixOS or with Nix, from
-> [its flake](#on-nixos-and-with-nix); anywhere else, [build it from source](#from-source) in
-> about a minute.
-
 <p align="center">
   <img src="docs/images/readme-screenshot.webp" alt="Nordend in a dark theme taken from Noctalia: one header with back and forward, the path and the window's buttons, the sidebar running to the top, three tabs, five columns down a project folder, and the info pane with a JSON file's coloured preview" width="100%">
   <br>
   <sub>One header, the sidebar to the top, three tabs, the columns down a project, and a JSON file's preview in the info pane, all in the colours of the desktop's theme.</sub>
 </p>
+
+> [!NOTE]
+> **Nordend 0.6.1**, the latest release: **rounded corners and a soft shadow** around Nordend's
+> own header, as GTK draws them (square with `[window] corner_radius = 0`); a **see-through
+> background** with solid text, icons and pictures (`[window] background_opacity`, by
+> barrulus); and a clean exit at logout, with your tabs and views saved. Young software, used
+> every day by its author. On Void Linux, [install it as a package](#on-void-linux); on NixOS or
+> with Nix, from [its flake](#on-nixos-and-with-nix); anywhere else,
+> [build it from source](#from-source) in about a minute.
 
 ## Why Nordend
 
