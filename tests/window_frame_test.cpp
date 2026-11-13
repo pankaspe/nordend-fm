@@ -179,7 +179,7 @@ TEST_CASE("window frame: translucent content does not reveal the outline or shad
                                                                  {kWidth - m - 1, kHeight / 2},
                                                                  {kWidth / 2, m},
                                                                  {kWidth / 2, kHeight - m - 1},
-                                                                 {m + r / 2, m + r / 3}}}) {
+                                                                 {m + (r / 2), m + (r / 3)}}}) {
                     CAPTURE(x);
                     CAPTURE(y);
                     const auto pixel = pixels.at(x, y);

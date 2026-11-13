@@ -161,8 +161,10 @@ TEST_CASE("renderer: adjacent translucent panels meet at fractional pixel bounda
             glReadPixels(x, kHeight - 10, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
             CHECK(rgba[0] == 0);  // no uncovered red seam
             CHECK(rgba[3] == doctest::Approx(0.7 * 255).epsilon(0.005));
-            CHECK(rgba[x < boundary ? 1 : 2] == rgba[3]);
-            CHECK(rgba[x < boundary ? 2 : 1] == 0);
+            // Green left of the boundary, blue from it on.
+            const bool left = x < boundary;
+            CHECK((left ? rgba[1] : rgba[2]) == rgba[3]);
+            CHECK((left ? rgba[2] : rgba[1]) == 0);
         }
     }
 }
