@@ -64,6 +64,15 @@ Browser::Browser(core::EventLoop& loop, core::WorkerPool& pool, fs::DirectoryWat
       status_bar_{loop, pool, redraw,
                   [this](std::size_t view) { set_mode(static_cast<Mode>(view)); },
                   [this] { shortcuts_.open(); }},
+      pick_bar_{redraw,
+                {.accept = [this] { accept_pick(); },
+                 .cancel =
+                     [this] {
+                         if (cancel_) {
+                             cancel_();
+                         }
+                     },
+                 .filters = [this](float x, float y) { show_pick_filters(x, y); }}},
       shortcuts_{redraw},
       editor_{redraw,
               [this](const std::shared_ptr<Folder>& folder, const std::string& from,
@@ -162,6 +171,9 @@ Pane& Browser::add_pane(std::size_t at) {
     added.columns.set_show_hidden(show_hidden_);
     added.grid.set_show_hidden(show_hidden_);
     added.details.set_show_hidden(show_hidden_);
+    added.columns.set_only(only_);
+    added.grid.set_only(only_);
+    added.details.set_only(only_);
     added.grid.set_info_visible(info_visible_);
     added.details.set_info_visible(info_visible_);
     return added;
@@ -2157,6 +2169,9 @@ void Browser::draw(ui::Renderer& renderer, const ui::Rect& bounds, const theme::
         tab_bar_.not_drawn();
     }
     const float bar = std::min(StatusBar::kHeight, std::max(0.0F, view.height - path_row));
+    // The file chooser's bar over the status bar.
+    const float pick_bar =
+        pick_ ? std::min(PickBar::kHeight, std::max(0.0F, view.height - path_row - bar)) : 0.0F;
     if (folder) {
         if (own_header) {
             const float left = forward_.right() + 2.0F;
@@ -2170,6 +2185,10 @@ void Browser::draw(ui::Renderer& renderer, const ui::Rect& bounds, const theme::
         }
         status_bar_.draw(renderer, {view.x, view.bottom() - bar, view.width, bar}, palette, icons,
                          *folder, static_cast<std::size_t>(pane().mode));
+        if (pick_bar > 0.0F) {
+            pick_bar_.draw(renderer, {view.x, view.bottom() - bar - pick_bar, view.width, pick_bar},
+                           palette, icons);
+        }
     }
     if (own_header && header_.height > 0.0F) {
         renderer.fill_rect({header_.x, header_.bottom() - (1.0F / renderer.scale()), header_.width,
@@ -2188,7 +2207,7 @@ void Browser::draw(ui::Renderer& renderer, const ui::Rect& bounds, const theme::
     }
     editor_.slot().rect.reset();  // the view places it again if it shows the name
     view_area_ = {view.x, view.y + path_row, view.width,
-                  std::max(0.0F, view.height - path_row - bar)};
+                  std::max(0.0F, view.height - path_row - bar - pick_bar)};
     draw_view(renderer, view_area_, palette, icons, now);
     draw_band(renderer, palette);
     editor_.draw(renderer, palette);
@@ -2331,6 +2350,9 @@ ui::CursorShape Browser::cursor_at(float x, float y) const {
     if (status_bar_.claims(x, y)) {
         return hand(status_bar_.clickable_at(x, y));
     }
+    if (pick_ && pick_bar_.claims(x, y)) {
+        return hand(pick_bar_.clickable_at(x, y));
+    }
     return hand(info_pane_.clickable_at(x, y));
 }
 
@@ -2438,6 +2460,8 @@ void Browser::dispatch_pointer(const ui::PointerEvent& event, Clock::time_point 
             target = Target::breadcrumb;
         } else if (status_bar_.claims(event.x, event.y)) {
             target = Target::status_bar;
+        } else if (pick_ && pick_bar_.claims(event.x, event.y)) {
+            target = Target::pick_bar;
         }
         if (target != pointer_target_) {
             send_pointer(pointer_target_, {.kind = Kind::leave}, now);
@@ -2680,6 +2704,9 @@ void Browser::send_pointer(Target target, const ui::PointerEvent& event, Clock::
             break;
         case Target::status_bar:
             status_bar_.pointer(event);
+            break;
+        case Target::pick_bar:
+            pick_bar_.pointer(event);
             break;
         case Target::tabs:
             tab_bar_.pointer(event);
@@ -3419,8 +3446,15 @@ bool Browser::take_key(const ui::KeyEvent& event, Clock::time_point now) {
         quick_look_.follow(current_folder());
         return handled;
     }
-    if (cancel_ && event.keysym == XKB_KEY_Escape && event.modifiers == ui::Modifiers{}) {
-        cancel_();
+    if (pick_ && event.keysym == XKB_KEY_Escape && event.modifiers == ui::Modifiers{}) {
+        if (cancel_) {
+            cancel_();
+        }
+        return true;
+    }
+    if (pick_ && (event.keysym == XKB_KEY_Return || event.keysym == XKB_KEY_KP_Enter) &&
+        event.modifiers == ui::Modifiers{.ctrl = true}) {
+        accept_pick();
         return true;
     }
     // What is not listed for the sidebar is nothing there (Space: Quick Look shows the view's
@@ -3574,7 +3608,7 @@ bool Browser::open_selection() {
         show_message("Restore it first to open it", false);
         return true;
     }
-    if (!open_) {
+    if (!open_ && !pick_) {
         return false;
     }
     const auto with_type = [&folder](fs::Entry entry) {
@@ -3591,8 +3625,144 @@ bool Browser::open_selection() {
             }
         }
     }
+    if (pick_) {
+        std::vector<std::filesystem::path> paths;
+        paths.reserve(files.size());
+        for (const fs::Entry& file : files) {
+            paths.push_back(folder->path() / file.name);
+        }
+        choose(std::move(paths));
+        return true;
+    }
     open_(folder->path(), std::move(files));
     return true;
+}
+
+void Browser::set_pick(Pick pick, Chosen chosen, std::function<void()> cancel) {
+    pick_ = std::move(pick);
+    chosen_ = std::move(chosen);
+    cancel_ = std::move(cancel);
+    if (!pick_->filters.empty()) {
+        pick_->filter = std::min(pick_->filter, pick_->filters.size() - 1);
+    }
+    std::string accept = pick_->accept_label;
+    if (accept.empty()) {
+        accept = pick_->folders ? "Select" : "Open";
+    }
+    pick_bar_.set_accept_label(accept);
+    apply_pick_filter();
+}
+
+std::optional<std::size_t> Browser::pick_filter() const {
+    if (!pick_ || pick_->filters.empty()) {
+        return std::nullopt;
+    }
+    return pick_->filter;
+}
+
+void Browser::set_pick_filter(std::size_t index) {
+    if (!pick_ || index >= pick_->filters.size() || index == pick_->filter) {
+        return;
+    }
+    pick_->filter = index;
+    apply_pick_filter();
+}
+
+void Browser::apply_pick_filter() {
+    if (!pick_) {
+        return;
+    }
+    const Pick& pick = *pick_;
+    only_ = {};
+    if (pick.folders) {
+        only_ = [](const fs::Entry& entry) { return entry.is_directory(); };
+    } else if (!pick.filters.empty()) {
+        const fs::FileFilter& filter = pick.filters.at(pick.filter);
+        auto match = std::make_shared<const fs::FileFilterMatch>(filter, mime_);
+        only_ = [match](const fs::Entry& entry) {
+            return entry.is_directory() || match->passes(entry);
+        };
+    }
+    pick_bar_.set_filter_label(
+        pick.filters.empty() || pick.folders ? std::string{} : pick.filters.at(pick.filter).label);
+    for (const std::unique_ptr<Pane>& each : panes_) {
+        each->columns.set_only(only_);
+        each->grid.set_only(only_);
+        each->details.set_only(only_);
+    }
+    redraw_();
+}
+
+void Browser::show_pick_filters(float x, float y) {
+    if (!pick_ || pick_->filters.empty()) {
+        return;
+    }
+    std::vector<MenuItem> items;
+    for (std::size_t i = 0; i < pick_->filters.size(); ++i) {
+        MenuItem item;
+        item.id = "filter:" + std::to_string(i);
+        item.label = pick_->filters[i].label;
+        item.radio = true;
+        item.checked = i == pick_->filter;
+        item.action = [this, i] { set_pick_filter(i); };
+        items.push_back(std::move(item));
+    }
+    menu_.open(x, y, std::move(items), false);
+}
+
+void Browser::accept_pick() {
+    if (!pick_) {
+        return;
+    }
+    const std::shared_ptr<Folder> folder = current_folder();
+    if (!folder) {
+        return;
+    }
+    const fs::Entry* const cursor = folder->cursor_entry();
+    if (pick_->folders) {
+        // The folders selected (one only without multiple), else the cursor's, else the one shown.
+        std::vector<std::filesystem::path> paths;
+        if (cursor != nullptr && cursor->is_directory()) {
+            if (pick_->multiple && folder->is_selected(cursor->name)) {
+                for (const fs::Entry& entry : folder->entries()) {
+                    if (entry.is_directory() && folder->is_selected(entry.name)) {
+                        paths.push_back(folder->path() / entry.name);
+                    }
+                }
+            } else {
+                paths.push_back(folder->path() / cursor->name);
+            }
+        } else {
+            paths.push_back(folder->path());
+        }
+        choose(std::move(paths));
+        return;
+    }
+    if (cursor == nullptr) {
+        show_message(pick_->multiple ? "Choose files" : "Choose a file", false);
+        return;
+    }
+    if (cursor->is_directory()) {
+        // As Enter: into the folder.
+        ui::KeyEvent enter;
+        enter.keysym = XKB_KEY_Return;
+        view_key(enter, Clock::now());
+        return;
+    }
+    open_selection();
+}
+
+void Browser::choose(std::vector<std::filesystem::path> paths) {
+    if (!pick_ || paths.empty()) {
+        return;
+    }
+    if (!pick_->multiple && paths.size() > 1) {
+        show_message(pick_->folders ? "Choose one folder" : "Choose one file", false);
+        return;
+    }
+    if (chosen_) {
+        chosen_(std::move(paths), pick_filter());
+    }
 }
 
 void Browser::open_terminal() {

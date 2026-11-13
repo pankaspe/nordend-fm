@@ -57,7 +57,8 @@ void GridView::show(std::shared_ptr<Folder> folder) {
 }
 
 void GridView::open(const std::filesystem::path& directory) {
-    show(std::make_shared<Folder>(loop_, pool_, watcher_, mime_, directory, redraw_, show_hidden_));
+    show(std::make_shared<Folder>(loop_, pool_, watcher_, mime_, directory, redraw_, show_hidden_,
+                                  only_));
 }
 
 std::optional<ViewHit> GridView::hit(float x, float y) const {
@@ -136,6 +137,13 @@ void GridView::set_order(const fs::SortOrder& order) {
     order_.mime = mime_.get();
     if (folder_) {
         folder_->set_order(order_);
+    }
+}
+
+void GridView::set_only(fs::Listing::Only only) {
+    only_ = std::move(only);
+    if (folder_) {
+        folder_->set_only(only_);
     }
 }
 

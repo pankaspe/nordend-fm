@@ -17,13 +17,14 @@ bool hidden_name(const std::string& name) { return !name.empty() && name.front()
 
 Folder::Folder(core::EventLoop& loop, core::WorkerPool& pool, fs::DirectoryWatcher& watcher,
                std::shared_ptr<const fs::MimeDatabase> mime, std::filesystem::path directory,
-               std::function<void()> redraw, bool show_hidden)
+               std::function<void()> redraw, bool show_hidden, fs::Listing::Only only)
     : pool_{pool},
       mime_{std::move(mime)},
       redraw_{std::move(redraw)},
       model_{loop, pool, watcher, mime_} {
     model_.set_change_handler([this](const fs::ModelChange& change) { on_change(change); });
     model_.set_filter(show_hidden, {});
+    model_.set_only(std::move(only));
     model_.open(std::move(directory));
 }
 
@@ -323,19 +324,40 @@ void Folder::set_show_hidden(bool show, bool keep_cursor) {
         if (keep_cursor) {
             keep = entry->name;
         } else {
-            const std::vector<fs::Entry>& list = entries();
-            const auto shown = [](const fs::Entry& candidate) { return !candidate.hidden(); };
-            const auto at = list.begin() + (entry - list.data());
-            if (const auto after = std::find_if(at, list.end(), shown); after != list.end()) {
-                next = after->name;
-            } else if (const auto before =
-                           std::find_if(std::make_reverse_iterator(at), list.rend(), shown);
-                       before != list.rend()) {
-                next = before->name;
-            }
+            next = nearest_shown([](const fs::Entry& candidate) { return !candidate.hidden(); });
         }
     }
     model_.set_filter(show, std::move(keep));
+    move_cursor_to(next);
+}
+
+void Folder::set_only(fs::Listing::Only only) {
+    std::string next;
+    if (const fs::Entry* const entry = cursor_entry(); entry != nullptr && only && !only(*entry)) {
+        next = nearest_shown(only);
+    }
+    model_.set_only(std::move(only));
+    move_cursor_to(next);
+}
+
+std::string Folder::nearest_shown(const fs::Listing::Only& shown) const {
+    const fs::Entry* const entry = cursor_entry();
+    if (entry == nullptr) {
+        return {};
+    }
+    const std::vector<fs::Entry>& list = entries();
+    const auto at = list.begin() + (entry - list.data());
+    if (const auto after = std::find_if(at, list.end(), shown); after != list.end()) {
+        return after->name;
+    }
+    if (const auto before = std::find_if(std::make_reverse_iterator(at), list.rend(), shown);
+        before != list.rend()) {
+        return before->name;
+    }
+    return {};
+}
+
+void Folder::move_cursor_to(const std::string& next) {
     if (!next.empty()) {
         // The rest of the selection stays; alone, the cursor's entry is selected.
         const std::vector<fs::Entry>& list = entries();

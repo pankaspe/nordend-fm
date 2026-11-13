@@ -86,7 +86,8 @@ void DetailsView::show(std::shared_ptr<Folder> folder) {
 }
 
 void DetailsView::open(const std::filesystem::path& directory) {
-    show(std::make_shared<Folder>(loop_, pool_, watcher_, mime_, directory, redraw_, show_hidden_));
+    show(std::make_shared<Folder>(loop_, pool_, watcher_, mime_, directory, redraw_, show_hidden_,
+                                  only_));
 }
 
 std::optional<ViewHit> DetailsView::hit(float x, float y) const {
@@ -120,6 +121,13 @@ void DetailsView::band_scroll(const Folder& folder, float pixels) {
     if (folder_.get() == &folder) {
         scroller_.jump_to(scroller_.offset() + pixels);
         redraw_();
+    }
+}
+
+void DetailsView::set_only(fs::Listing::Only only) {
+    only_ = std::move(only);
+    if (folder_) {
+        folder_->set_only(only_);
     }
 }
 

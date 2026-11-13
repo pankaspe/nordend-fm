@@ -154,6 +154,15 @@ void Listing::set_order(SortOrder order) {
 Listing::Moved Listing::set_filter(bool show_hidden, std::string keep) {
     show_hidden_ = show_hidden;
     keep_ = std::move(keep);
+    return refilter();
+}
+
+Listing::Moved Listing::set_only(Only only) {
+    only_ = std::move(only);
+    return refilter();
+}
+
+Listing::Moved Listing::refilter() {
     Moved moved;
     const auto back =
         std::ranges::partition(hidden_, [this](const Entry& entry) { return left_out(entry); });

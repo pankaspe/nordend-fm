@@ -199,11 +199,20 @@ const char* button_name(ui::PointerButton button) {
 
 constexpr const char* kUsage =
     "usage: nordend [--config FILE] [--check-config] [--test-scene] [--version] [--about] [DIR]\n"
-    "       nordend --pick [--multiple] [--title TEXT] [DIR]\n"
-    "  DIR             the folder to show (default: your home folder)\n"
-    "  --pick          choose a file (Enter) and print its file:// URI; Escape cancels\n"
+    "       nordend --pick [--multiple] [--folders] [--title TEXT] [--accept-label TEXT]\n"
+    "               [--filter LABEL [--glob PATTERN]... [--mime TYPE]...]... [--current-filter N]\n"
+    "               [--parent wayland:HANDLE] [DIR]\n"
+    "  DIR             the folder to show (default: your home folder; with --pick, the last one)\n"
+    "  --pick          choose a file (Enter, Ctrl+Enter) and print its file:// URI; Escape "
+    "cancels\n"
+    "                  (status 0, nothing printed); with filters, a last line filter:N\n"
     "  --multiple      with --pick: the selected files, one URI a line\n"
+    "  --folders       with --pick: choose folders instead of files\n"
     "  --title TEXT    with --pick: the window's title\n"
+    "  --accept-label  with --pick: the word on the choosing button (\"Open\")\n"
+    "  --filter LABEL  with --pick: a filter offered, of the --glob and --mime after it\n"
+    "  --current-filter N  the filter in use at first (0 = the first --filter)\n"
+    "  --parent        with --pick: the application's window, as xdg-foreign exports it\n"
     "  --config FILE   read FILE instead of ~/.config/nordend/config.toml\n"
     "  --test-scene    show the renderer test scene instead of a folder\n"
     "  --check-config  report problems in the config file and exit (status 1 if any)\n"
@@ -269,12 +278,81 @@ int print_about() {
     return 0;
 }
 
-// What --pick prints: one file:// URI a line, written at once. false when it could not be written.
-bool print_choice(const std::filesystem::path& directory, const std::vector<fs::Entry>& files) {
+// --pick and what goes with it (ROADMAP 4, the portal's file chooser).
+struct PickArgs {
+    bool asked{false};
+    std::string title;
+    std::string parent;  // "wayland:HANDLE"
+    views::Browser::Pick pick;
+};
+
+// Reads argv[i] (and its values) when it is a --pick option: true, i on its last value. error
+// says what is wrong when false and it was one.
+bool read_pick_option(int argc, char** argv, int& i, PickArgs& args, std::string& error) {
+    const std::string_view arg{argv[i]};
+    const auto value = [&](std::string& into) {
+        if (i + 1 == argc) {
+            error = std::format("{} needs a value", arg);
+            return false;
+        }
+        into = argv[++i];
+        return true;
+    };
+    views::Browser::Pick& pick = args.pick;
+    if (arg == "--pick") {
+        args.asked = true;
+    } else if (arg == "--multiple") {
+        pick.multiple = true;
+    } else if (arg == "--folders") {
+        pick.folders = true;
+    } else if (arg == "--title") {
+        return value(args.title);
+    } else if (arg == "--accept-label") {
+        return value(pick.accept_label);
+    } else if (arg == "--parent") {
+        return value(args.parent);
+    } else if (arg == "--filter") {
+        pick.filters.emplace_back();
+        return value(pick.filters.back().label);
+    } else if (arg == "--glob" || arg == "--mime") {
+        if (pick.filters.empty()) {
+            error = std::format("{} goes after a --filter", arg);
+            return false;
+        }
+        std::string pattern;
+        if (!value(pattern)) {
+            return false;
+        }
+        (arg == "--glob" ? pick.filters.back().globs : pick.filters.back().types)
+            .push_back(std::move(pattern));
+    } else if (arg == "--current-filter") {
+        std::string number;
+        if (!value(number)) {
+            return false;
+        }
+        const auto [end, failed] =
+            std::from_chars(number.data(), number.data() + number.size(), pick.filter);
+        if (failed != std::errc{} || end != number.data() + number.size()) {
+            error = std::format("--current-filter wants a number, not '{}'", number);
+            return false;
+        }
+    } else {
+        return false;
+    }
+    return true;
+}
+
+// What --pick prints: one file:// URI a line, then "filter:N" when filters were offered; written
+// at once. false when it could not be written.
+bool print_choice(const std::vector<std::filesystem::path>& paths,
+                  std::optional<std::size_t> filter) {
     std::string out;
-    for (const fs::Entry& entry : files) {
-        out += core::file_uri(directory / entry.name);
+    for (const std::filesystem::path& path : paths) {
+        out += core::file_uri(path);
         out += '\n';
+    }
+    if (filter) {
+        out += std::format("filter:{}\n", *filter);
     }
     std::string_view rest{out};
     while (!rest.empty()) {
@@ -313,10 +391,7 @@ int main(int argc, char** argv) {
     std::filesystem::path start_dir;
     bool check_only = false;
     bool test_scene = false;
-    // --pick: choosing files for an application (ROADMAP 4, the portal's picker).
-    bool pick = false;
-    bool pick_multiple = false;
-    std::string pick_title;
+    PickArgs pick_args;
     for (int i = 1; i < argc; ++i) {
         const std::string_view arg{argv[i]};
         if (arg == "--version") {
@@ -326,20 +401,18 @@ int main(int argc, char** argv) {
         if (arg == "--about") {
             return print_about();
         }
+        std::string pick_error;
+        if (read_pick_option(argc, argv, i, pick_args, pick_error)) {
+            continue;
+        }
+        if (!pick_error.empty()) {
+            std::fprintf(stderr, "nordend: %s\n%s", pick_error.c_str(), kUsage);
+            return 2;
+        }
         if (arg == "--check-config") {
             check_only = true;
         } else if (arg == "--test-scene") {
             test_scene = true;
-        } else if (arg == "--pick") {
-            pick = true;
-        } else if (arg == "--multiple") {
-            pick_multiple = true;
-        } else if (arg == "--title") {
-            if (i + 1 == argc) {
-                std::fprintf(stderr, "nordend: --title needs a text\n%s", kUsage);
-                return 2;
-            }
-            pick_title = argv[++i];
         } else if (arg == "--config") {
             if (i + 1 == argc) {
                 std::fprintf(stderr, "nordend: --config needs a file\n%s", kUsage);
@@ -353,8 +426,11 @@ int main(int argc, char** argv) {
             return 2;
         }
     }
-    if ((pick_multiple || !pick_title.empty()) && !pick) {
-        std::fprintf(stderr, "nordend: --multiple and --title go with --pick\n%s", kUsage);
+    const bool pick = pick_args.asked;
+    if (!pick && (pick_args.pick.multiple || pick_args.pick.folders || !pick_args.title.empty() ||
+                  !pick_args.pick.accept_label.empty() || !pick_args.pick.filters.empty() ||
+                  !pick_args.parent.empty())) {
+        std::fprintf(stderr, "nordend: those options go with --pick\n%s", kUsage);
         return 2;
     }
     if (pick && test_scene) {
@@ -437,16 +513,26 @@ int main(int argc, char** argv) {
         follow_desktop();
         startup.mark("portal");
         // How Nordend was left (ROADMAP 7.5a).
-        const std::filesystem::path state_path = views::default_state_path();
-        const views::StateResult remembered = views::load_state(state_path);
+        // The file chooser keeps its own (picker.toml beside it): its folder and view are not
+        // Nordend's, and the first time it shows the grid.
+        std::filesystem::path state_path = views::default_state_path();
+        if (pick && !state_path.empty()) {
+            state_path.replace_filename("picker.toml");
+        }
+        views::StateResult remembered = views::load_state(state_path);
         for (const std::string& problem : remembered.problems) {
             log::warn("state: {}", problem);
         }
+        if (std::error_code missing; pick && !std::filesystem::exists(state_path, missing)) {
+            remembered.state.mode = views::State::Mode::grid;
+        }
         std::string window_title = "Nordend";
-        if (!pick_title.empty()) {
-            window_title = pick_title;
+        if (!pick_args.title.empty()) {
+            window_title = pick_args.title;
+        } else if (pick && pick_args.pick.folders) {
+            window_title = "Choose a Folder";
         } else if (pick) {
-            window_title = pick_multiple ? "Choose Files" : "Choose a File";
+            window_title = pick_args.pick.multiple ? "Choose Files" : "Choose a File";
         }
         ui::Window window{
             display,
@@ -467,6 +553,14 @@ int main(int argc, char** argv) {
              .background_opacity = config.window.background_opacity,
              .corner_radius = static_cast<float>(config.window.corner_radius)}};
         startup.mark("window");
+        if (std::string_view parent{pick_args.parent}; parent.starts_with("wayland:")) {
+            parent.remove_prefix(8);
+            if (window.set_parent(std::string{parent})) {
+                log::info("pick: over the application's window");
+            } else {
+                log::info("pick: the compositor has no xdg-foreign: a window of its own");
+            }
+        }
         ui::Seat seat{display};
         seat.set_multi_click(std::chrono::milliseconds{config.pointer.double_click_ms},
                              static_cast<float>(config.pointer.double_click_distance));
@@ -535,9 +629,6 @@ int main(int argc, char** argv) {
         std::int32_t restored_width = remembered.state.window_width;
         std::int32_t restored_height = remembered.state.window_height;
         const auto note_state = [&] {
-            if (pick) {
-                return;  // a picker leaves the tabs and the window as Nordend left them
-            }
             const ui::WindowState& shown = window.state();
             if (!shown.maximized && !shown.fullscreen && !shown.tiled_left && !shown.tiled_right &&
                 !shown.tiled_top && !shown.tiled_bottom) {
@@ -569,25 +660,22 @@ int main(int argc, char** argv) {
                                        std::move(done));
                 });
             if (pick) {
-                // Enter on a file chooses it (the selection with --multiple); folders open.
-                columns->set_open_handler([&](const std::filesystem::path& directory,
-                                              const std::vector<fs::Entry>& files) {
-                    if (!pick_multiple && files.size() > 1) {
-                        columns->show_message("Choose one file", false);
-                        return;
-                    }
-                    if (!print_choice(directory, files)) {
-                        log::error("pick: cannot write the choice");
-                        loop.quit(2);
-                        return;
-                    }
-                    log::info("pick: {} file(s) chosen", files.size());
-                    loop.quit(0);
-                });
-                columns->set_cancel_handler([&] {
-                    log::info("pick: cancelled");
-                    loop.quit(0);  // nothing printed: 1 is for errors
-                });
+                columns->set_pick(
+                    pick_args.pick,
+                    [&](const std::vector<std::filesystem::path>& paths,
+                        std::optional<std::size_t> filter) {
+                        if (!print_choice(paths, filter)) {
+                            log::error("pick: cannot write the choice");
+                            loop.quit(2);
+                            return;
+                        }
+                        log::info("pick: {} chosen", paths.size());
+                        loop.quit(0);
+                    },
+                    [&] {
+                        log::info("pick: cancelled");
+                        loop.quit(0);  // nothing printed: 1 is for errors
+                    });
             } else {
                 columns->set_open_handler(
                     [&](const std::filesystem::path& directory, std::vector<fs::Entry> files) {
@@ -679,7 +767,7 @@ int main(int argc, char** argv) {
             columns->apply(remembered.state);
             // Without a folder (Super+E) the tabs come back as they were left; with one
             // (xdg-open, "Show in folder") a single tab on it (ROADMAP 9.1d).
-            if (pick || !start_dir.empty() ||
+            if (!start_dir.empty() ||
                 !columns->restore_tabs(remembered.state.tabs, remembered.state.shown_tab)) {
                 columns->open(start_folder(start_dir));
             }

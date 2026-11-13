@@ -47,7 +47,7 @@ std::string status_of(const Folder& folder) {
     }
     std::string status = std::format("{} {}", count, count == 1 ? "item" : "items");
     if (const std::size_t hidden = folder.hidden_count(); hidden > 0) {
-        status += std::format(", {} hidden", hidden);
+        status += std::format(", {} {}", hidden, folder.filtered() ? "filtered out" : "hidden");
     }
     return status;
 }

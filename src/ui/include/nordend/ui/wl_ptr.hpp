@@ -9,6 +9,8 @@
 #include "viewporter-client-protocol.h"
 #include "xdg-activation-v1-client-protocol.h"
 #include "xdg-decoration-unstable-v1-client-protocol.h"
+#include "xdg-dialog-v1-client-protocol.h"
+#include "xdg-foreign-unstable-v2-client-protocol.h"
 #include "xdg-shell-client-protocol.h"
 
 namespace nordend::ui {
@@ -42,6 +44,10 @@ void destroy(xdg_activation_token_v1* token) noexcept;
 void destroy(wl_data_device_manager* manager) noexcept;
 void destroy(wl_data_device* device) noexcept;
 void destroy(wl_data_source* source) noexcept;
+void destroy(zxdg_importer_v2* importer) noexcept;
+void destroy(zxdg_imported_v2* imported) noexcept;
+void destroy(xdg_wm_dialog_v1* manager) noexcept;
+void destroy(xdg_dialog_v1* dialog) noexcept;
 
 struct WlDeleter {
     template <class T>

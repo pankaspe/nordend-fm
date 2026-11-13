@@ -4,6 +4,64 @@ Work log, newest first. Each entry: what was done, decisions, measurements, open
 
 ---
 
+## 2026-11-13 — Choosing files for real (ROADMAP 4b)
+
+**Tested by the author** (2026-11-13, `~/.local`, Umbriel): `--pick` with two filters on
+`docs` (the list from the bar, `filter:1` after the URI), Cancel printing nothing, `--folders`
+choosing a folder; Firefox through the portal started by hand: its own filters (in Italian, as
+Firefox sends its labels), a photo uploaded to a hosting site with only images listed, the
+download folder chosen with Select.
+
+**Fixed**
+- 4a's CI failed in the Nix job: sdbus-c++ 2.2.1 (Nix) tells a reply's error from its values by
+  the parameter's exact type, so the test's `Close` callback must take `std::optional<Error>` by
+  value (a clang-tidy tidy-up had made it a `const&`, fine with 2.3.1 here). Checked with
+  `nix build .#checks.x86_64-linux.nordend --rebuild`.
+
+**Done**
+- Filters: `fs::FileFilter` (label, globs, MIME types) and `fs::FileFilterMatch`: globs without
+  case (`fnmatch` with `FNM_CASEFOLD`, as GTK 4 matches patterns), exact types with their
+  subtypes (`MimeDatabase::is_a`: `text/plain` takes source code and `README`), `image/*` by
+  media through the subclasses chain (64 types at most), `*` and `*/*` for everything. The
+  type is the name's alone (the loader's `mime`, else `name_guess`, else octet-stream), as a
+  GTK chooser knows it: no file is read to filter.
+- `fs::Listing::set_only` (a predicate beside the hidden-files rule, `keep` still wins),
+  `DirectoryModel::set_only`, `Folder::set_only` (a cursor on an entry left out moves to the
+  nearest one shown, the code shared with `set_show_hidden`), `set_only` on the three views and
+  every pane (new tabs too). The status bar says "3 filtered out" instead of "3 hidden".
+- `Browser::set_pick(Pick, Chosen, cancel)` replaces 4a's cancel handler: Enter or a double
+  click on a file chooses it (the selection with `multiple`, else "Choose one file"),
+  Ctrl+Enter and the bar's button choose (on a folder in file mode: into it), Escape and Cancel
+  cancel. Folders (`Pick::folders`): only folders listed, Ctrl+Enter / "Select" choose the
+  cursor's folder (the selected ones with `multiple`), else the folder shown.
+- `PickBar` over the status bar: the filter in use with a chevron (the list opens in the context
+  menu, radio items), Cancel, and the application's word (`accept_label`, its `_` mnemonic
+  taken out; else "Open", "Select" for folders).
+- The picker keeps its own `picker.toml` beside `state.toml` (folder, tabs, view, window): the
+  first time it opens in the grid; `current_folder` still wins.
+- `nordend --pick` takes `--folders`, `--accept-label`, `--filter LABEL` with `--glob` and
+  `--mime` after it, `--current-filter N`, `--parent wayland:HANDLE`; with filters it prints
+  `filter:N` after the URIs. The service reads `filters` (`a(sa(us))`), `current_filter` (its
+  place in the list; alone when there is no list; left out when not in it), `accept_label`,
+  `directory` (no longer refused) and a `wayland:` `parent_window`, and answers
+  `current_filter` with the filter as the application sent it.
+- xdg-foreign v2 and xdg-dialog v1 bound by `ui::Display` (optional); `Window::set_parent`
+  imports the application's window, sets ours over it and modal. Umbriel offers neither
+  importer (checked with a registry listing: it has `xdg_wm_dialog_v1`, no `zxdg_importer_v2`),
+  so there the picker stays a window of its own; GNOME and Plasma to be tried in the VMs.
+- `nordend-snapshot --pick "Images=*.jpg;image/*,Text=text/plain"` (or `folders`).
+- Tests (463): the matcher (globs, case, subtypes, `image/*` for an ORF, unknown types),
+  `Listing::set_only`, the Browser choosing files, several, folders, Ctrl+Enter into a folder,
+  the bar's word; the service's options (filters, rule kinds left out, `current_filter` alone
+  or not in the list, X11 parents left out), arguments, `filter:N`, `current_filter` on the
+  bus, folders through the picker.
+
+**Open**
+- `choices` (an application's extra checkboxes and lists) wait for 4c with saving.
+- A file whose name says nothing is application/octet-stream to the filters (as for GTK).
+
+---
+
 ## 2026-11-13 — The file chooser service (ROADMAP 4a)
 
 **Tested by the author** (2026-11-13, `~/.local`, Umbriel): `nordend --pick` alone (one file,

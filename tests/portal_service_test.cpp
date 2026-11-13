@@ -131,7 +131,9 @@ struct Round {
             *client, sdbus::ServiceName{std::string{portal::kBusName}}, sdbus::ObjectPath{handle});
         request->callMethodAsync("Close")
             .onInterface(std::string{portal::kRequest})
-            .uponReplyInvoke([](const std::optional<sdbus::Error>& /*error*/) {});
+            // By value: sdbus-c++ 2.2 (Nix) tells the error from a reply value by its type.
+            // NOLINTNEXTLINE(performance-unnecessary-value-param)
+            .uponReplyInvoke([](std::optional<sdbus::Error> /*error*/) {});
         client_bus->pump();
     }
 
@@ -153,17 +155,35 @@ TEST_CASE("portal: OpenFile's options as the picker follows them") {
     options.emplace("multiple", sdbus::Variant{true});
     options.emplace("current_folder", sdbus::Variant{bytes("/home/me/Pictures")});
     options.emplace("accept_label", sdbus::Variant{std::string{"_Open"}});
-    const portal::PickRequest request = portal::open_file_request("Open a Photo", options);
+    const portal::Filter images{"Images", {{0U, "*.jpg"}, {1U, "image/*"}, {7U, "odd"}}};
+    const portal::Filter text{"Text", {{1U, "text/plain"}}};
+    options.emplace("filters", sdbus::Variant{std::vector<portal::Filter>{images, text}});
+    options.emplace("current_filter", sdbus::Variant{text});
+    const portal::PickRequest request =
+        portal::open_file_request("Open a Photo", "wayland:abc", options);
     CHECK(request.title == "Open a Photo");
     CHECK(request.multiple);
     CHECK_FALSE(request.directory);
     CHECK(request.folder == "/home/me/Pictures");
-    CHECK(portal::picker_arguments(request) == std::vector<std::string>{"--pick", "--multiple",
-                                                                        "--title", "Open a Photo",
-                                                                        "/home/me/Pictures"});
+    CHECK(request.parent_window == "wayland:abc");
+    CHECK(request.accept_label == "_Open");
+    REQUIRE(request.filters.size() == 2);
+    CHECK(request.filter == std::optional<std::size_t>{1});
+    const nordend::fs::FileFilter ours = portal::file_filter(images);
+    CHECK(ours.label == "Images");
+    CHECK(ours.globs == std::vector<std::string>{"*.jpg"});
+    CHECK(ours.types == std::vector<std::string>{"image/*"});  // rule 7 is no kind we know
+    const std::vector<std::string> expected{
+        "--pick",           "--multiple", "--title",  "Open a Photo",
+        "--accept-label",   "_Open",      "--filter", "Images",
+        "--glob",           "*.jpg",      "--mime",   "image/*",
+        "--filter",         "Text",       "--mime",   "text/plain",
+        "--current-filter", "1",          "--parent", "wayland:abc",
+        "/home/me/Pictures"};
+    CHECK(portal::picker_arguments(request) == expected);
 
     SUBCASE("nothing asked: one file, the picker's own folder and title") {
-        const portal::PickRequest plain = portal::open_file_request("", {});
+        const portal::PickRequest plain = portal::open_file_request("", "", {});
         CHECK_FALSE(plain.multiple);
         CHECK(plain.folder.empty());
         CHECK(portal::picker_arguments(plain) == std::vector<std::string>{"--pick"});
@@ -173,18 +193,34 @@ TEST_CASE("portal: OpenFile's options as the picker follows them") {
         odd.emplace("multiple", sdbus::Variant{std::string{"yes"}});
         odd.emplace("directory", sdbus::Variant{std::uint32_t{1}});
         odd.emplace("current_folder", sdbus::Variant{bytes("relative/folder")});
-        const portal::PickRequest left = portal::open_file_request("", odd);
+        const portal::PickRequest left = portal::open_file_request("", "x11:42", odd);
+        CHECK(left.parent_window.empty());  // X11 windows: not ours to follow
         CHECK_FALSE(left.multiple);
         CHECK_FALSE(left.directory);
         CHECK(left.folder.empty());
         odd.erase("current_folder");
         odd.emplace("current_folder", sdbus::Variant{std::string{"/as/a/string"}});
-        CHECK(portal::open_file_request("", odd).folder.empty());
+        CHECK(portal::open_file_request("", "x11:42", odd).folder.empty());
     }
     SUBCASE("folders") {
         portal::Options folders;
         folders.emplace("directory", sdbus::Variant{true});
-        CHECK(portal::open_file_request("", folders).directory);
+        const portal::PickRequest folder = portal::open_file_request("", "", folders);
+        CHECK(folder.directory);
+        CHECK(portal::picker_arguments(folder) == std::vector<std::string>{"--pick", "--folders"});
+    }
+    SUBCASE("a current filter without a list is the only one; one not in the list is left out") {
+        portal::Options alone;
+        alone.emplace("current_filter", sdbus::Variant{text});
+        const portal::PickRequest one = portal::open_file_request("", "", alone);
+        REQUIRE(one.filters.size() == 1);
+        CHECK(one.filter == std::optional<std::size_t>{0});
+        portal::Options other;
+        other.emplace("filters", sdbus::Variant{std::vector<portal::Filter>{images}});
+        other.emplace("current_filter", sdbus::Variant{text});
+        const portal::PickRequest kept = portal::open_file_request("", "", other);
+        CHECK(kept.filters.size() == 1);
+        CHECK_FALSE(kept.filter);
     }
 }
 
@@ -194,6 +230,10 @@ TEST_CASE("portal: the picker's output and status make the answer") {
     CHECK(chosen.response == portal::kResponseOk);
     CHECK(chosen.uris ==
           std::vector<std::string>{"file:///home/me/a%20b.jpg", "file:///home/me/c.ORF"});
+    CHECK(portal::pick_result(output + "filter:1\n", exited(0)).filter ==
+          std::optional<std::size_t>{1});
+    CHECK_FALSE(portal::pick_result(output + "filter:x\n", exited(0)).filter);
+    CHECK_FALSE(portal::pick_result("filter:1\n", exited(0)).filter);  // a cancel has none
     // The last line without its newline still counts.
     CHECK(portal::pick_result("file:///x", exited(0)).uris ==
           std::vector<std::string>{"file:///x"});
@@ -270,16 +310,31 @@ TEST_CASE("portal: OpenFile on the bus runs the picker and answers with its choi
         CHECK(answer->response == portal::kResponseCancelled);
         CHECK(round.chooser->pending() == 0);
     }
-    SUBCASE("folders and saving are not there yet: \"other\", without a picker") {
-        round.start("printf 'file:///tmp/x\\n'");
+    SUBCASE("the filter in use comes back as current_filter") {
+        round.start("printf 'file:///tmp/notes.txt\\nfilter:1\\n'");
+        const portal::Filter images{"Images", {{1U, "image/*"}}};
+        const portal::Filter text{"Text", {{1U, "text/plain"}}};
+        portal::Options options;
+        options.emplace("filters", sdbus::Variant{std::vector<portal::Filter>{images, text}});
+        const auto answer = round.call("OpenFile", kHandle, options);
+        REQUIRE(run_until(round.loop, [&] { return answer->arrived; }));
+        CHECK(answer->response == portal::kResponseOk);
+        const auto it = answer->results.find("current_filter");
+        REQUIRE(it != answer->results.end());
+        CHECK(it->second.get<portal::Filter>() == text);
+    }
+    SUBCASE("folders go to the picker; saving is not there yet: \"other\", without a picker") {
+        round.start("printf 'file:///tmp\\n'");
         portal::Options folders;
         folders.emplace("directory", sdbus::Variant{true});
         const auto folder = round.call("OpenFile", kHandle, folders);
+        REQUIRE(run_until(round.loop, [&] { return folder->arrived; }));
+        CHECK(folder->response == portal::kResponseOk);
+        CHECK(round.arguments() == "--pick\n--folders\n--title\nOpen a Photo\n");
+        std::filesystem::remove(round.dir.path / "args");
         const auto save = round.call("SaveFile", kHandle, {});
         const auto saves = round.call("SaveFiles", kHandle, {});
-        REQUIRE(run_until(round.loop,
-                          [&] { return folder->arrived && save->arrived && saves->arrived; }));
-        CHECK(folder->response == portal::kResponseOther);
+        REQUIRE(run_until(round.loop, [&] { return save->arrived && saves->arrived; }));
         CHECK(save->response == portal::kResponseOther);
         CHECK(saves->response == portal::kResponseOther);
         CHECK_FALSE(std::filesystem::exists(round.dir.path / "args"));

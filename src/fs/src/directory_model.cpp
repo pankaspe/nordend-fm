@@ -68,7 +68,12 @@ void DirectoryModel::set_order(SortOrder order) {
 }
 
 void DirectoryModel::set_filter(bool show_hidden, std::string keep) {
-    Listing::Moved moved = listing_.set_filter(show_hidden, std::move(keep));
+    moved(listing_.set_filter(show_hidden, std::move(keep)));
+}
+
+void DirectoryModel::set_only(Listing::Only only) { moved(listing_.set_only(std::move(only))); }
+
+void DirectoryModel::moved(Listing::Moved moved) {
     if (moved.hidden.empty() && moved.shown.empty()) {
         return;
     }

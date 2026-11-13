@@ -36,6 +36,11 @@ nordend_wayland_protocol(
     ${WAYLAND_PROTOCOLS_DIR}/staging/fractional-scale/fractional-scale-v1.xml)
 nordend_wayland_protocol(${WAYLAND_PROTOCOLS_DIR}/staging/cursor-shape/cursor-shape-v1.xml)
 nordend_wayland_protocol(${WAYLAND_PROTOCOLS_DIR}/staging/xdg-activation/xdg-activation-v1.xml)
+# The file chooser over the application that asked (nordend --pick --parent): its window as
+# xdg-foreign exports it, and the dialog hint.
+nordend_wayland_protocol(
+    ${WAYLAND_PROTOCOLS_DIR}/unstable/xdg-foreign/xdg-foreign-unstable-v2.xml)
+nordend_wayland_protocol(${WAYLAND_PROTOCOLS_DIR}/staging/xdg-dialog/xdg-dialog-v1.xml)
 # cursor-shape references zwp_tablet_tool_v2: its glue code must be linked too.
 nordend_wayland_protocol(${WAYLAND_PROTOCOLS_DIR}/stable/tablet/tablet-v2.xml)
 

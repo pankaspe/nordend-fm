@@ -225,6 +225,8 @@ int main(int argc, char** argv) {
     // frames and report the time per frame.
     std::filesystem::path columns_dir;
     std::filesystem::path reveal;
+    // --pick FILTERS: the file chooser's bar, with filters "Label=*.glob;type/x,…" (or "folders").
+    std::string pick;
     std::string keys;
     std::filesystem::path thumbnails;
     std::string sort;
@@ -281,6 +283,8 @@ int main(int argc, char** argv) {
             reveal = args[2];
         } else if (option == "--keys") {
             keys = args[2];
+        } else if (option == "--pick") {
+            pick = args[2];
         } else if (option == "--thumbnails") {
             thumbnails = args[2];
         } else if (option == "--sort") {
@@ -332,7 +336,8 @@ int main(int argc, char** argv) {
             "usage: nordend-snapshot [--columns DIR [--reveal PATH] [--keys KEYS] [--thumbnails "
             "CACHE] [--sort FIELDS] [--info-expanded] [--info-width W] [--bench FRAMES] [--walk "
             "FRAMES] [--message TEXT] [--transfer TEXT] [--conflict NAME] [--drag NAME] "
-            "[--drop-over X,Y] [--band X1,Y1,X2,Y2] [--fake-disks] [--memory [--trim] "
+            "[--drop-over X,Y] [--band X1,Y1,X2,Y2] [--pick FILTERS|folders] [--fake-disks] "
+            "[--memory [--trim] "
             "[--default-malloc]]] [--csd STATE] [--desktop LOOK] [--gtk FILE] "
             "<out.ppm> "
             "[logical-width logical-height scale [colors.toml]]");
@@ -517,6 +522,34 @@ int main(int argc, char** argv) {
                        const std::vector<nordend::fs::Entry>& /*files*/,
                        const std::string& /*app_id*/) {});
                 columns->set_terminal_handler([](const std::filesystem::path& /*directory*/) {});
+                if (!pick.empty()) {
+                    views::Browser::Pick options;
+                    options.folders = pick == "folders";
+                    std::string_view rest{options.folders ? std::string_view{} : pick};
+                    while (!rest.empty()) {
+                        const std::string_view one = rest.substr(0, rest.find(','));
+                        rest = one.size() == rest.size() ? std::string_view{}
+                                                         : rest.substr(one.size() + 1);
+                        nordend::fs::FileFilter filter;
+                        const std::size_t equals = one.find('=');
+                        filter.label = std::string{one.substr(0, equals)};
+                        std::string_view rules =
+                            equals == std::string_view::npos ? "" : one.substr(equals + 1);
+                        while (!rules.empty()) {
+                            const std::string_view rule = rules.substr(0, rules.find(';'));
+                            rules = rule.size() == rules.size() ? std::string_view{}
+                                                                : rules.substr(rule.size() + 1);
+                            (rule.find('/') != std::string_view::npos ? filter.types : filter.globs)
+                                .emplace_back(rule);
+                        }
+                        options.filters.push_back(std::move(filter));
+                    }
+                    columns->set_pick(
+                        std::move(options),
+                        [](const std::vector<std::filesystem::path>& /*paths*/,
+                           std::optional<std::size_t> /*filter*/) {},
+                        [] {});
+                }
                 if (reveal.empty()) {
                     columns->open(columns_dir);
                 } else {

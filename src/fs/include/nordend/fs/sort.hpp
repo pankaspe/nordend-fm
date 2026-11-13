@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -58,6 +59,13 @@ public:
 
     Moved set_filter(bool show_hidden, std::string keep);
 
+    // Only the entries `only` passes, besides the rule for hidden ones (a file chooser's filter,
+    // nordend --pick); empty: every entry. keep stays shown either way here too.
+    using Only = std::function<bool(const Entry&)>;
+    Moved set_only(Only only);
+
+    [[nodiscard]] bool has_only() const noexcept { return static_cast<bool>(only_); }
+
     [[nodiscard]] bool shows_hidden() const noexcept { return show_hidden_; }
 
     void clear() {
@@ -74,9 +82,14 @@ public:
     [[nodiscard]] const std::vector<Entry>& hidden() const noexcept { return hidden_; }
 
 private:
-    [[nodiscard]] bool left_out(const Entry& entry) const noexcept {
-        return !show_hidden_ && entry.hidden() && entry.name != keep_;
+    [[nodiscard]] bool left_out(const Entry& entry) const {
+        if (!keep_.empty() && entry.name == keep_) {
+            return false;
+        }
+        return (!show_hidden_ && entry.hidden()) || (only_ && !only_(entry));
     }
+
+    Moved refilter();
 
     void merge(std::vector<Entry> chunk);
 
@@ -85,6 +98,7 @@ private:
     std::vector<Entry> hidden_;
     bool show_hidden_{true};
     std::string keep_;
+    Only only_;
 };
 
 }  // namespace nordend::fs

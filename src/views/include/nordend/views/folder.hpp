@@ -58,10 +58,11 @@ public:
         jump,   // landed or asked for by name: centered, at once
     };
 
-    // redraw runs when anything shown changes. show_hidden: dotfiles are listed.
+    // redraw runs when anything shown changes. show_hidden: dotfiles are listed. only: what a
+    // file chooser lists (empty: everything).
     Folder(core::EventLoop& loop, core::WorkerPool& pool, fs::DirectoryWatcher& watcher,
            std::shared_ptr<const fs::MimeDatabase> mime, std::filesystem::path directory,
-           std::function<void()> redraw, bool show_hidden = true);
+           std::function<void()> redraw, bool show_hidden = true, fs::Listing::Only only = {});
 
     ~Folder();
 
@@ -148,6 +149,13 @@ public:
 
     [[nodiscard]] bool shows_hidden() const noexcept { return model_.listing().shows_hidden(); }
 
+    // Lists only what `only` passes (a file chooser's filter; empty: everything). A cursor on an
+    // entry left out moves to the nearest one shown, as with set_show_hidden.
+    void set_only(fs::Listing::Only only);
+
+    // A file chooser's filter is in use: hidden_count() counts what it leaves out too.
+    [[nodiscard]] bool filtered() const noexcept { return model_.listing().has_only(); }
+
     // The entries left out.
     [[nodiscard]] std::size_t hidden_count() const noexcept {
         return model_.listing().hidden().size();
@@ -186,6 +194,11 @@ public:
     void sniff(std::size_t first, std::size_t last);
 
 private:
+    // The entry nearest the cursor's (after it, else before) that shown passes; empty if none.
+    [[nodiscard]] std::string nearest_shown(const fs::Listing::Only& shown) const;
+    // The cursor onto next (when not empty), the rest of the selection kept.
+    void move_cursor_to(const std::string& next);
+
     void on_change(const fs::ModelChange& change);
     void selection_changed();
 

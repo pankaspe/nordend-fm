@@ -152,6 +152,11 @@ public:
     void move(wl_seat* seat, std::uint32_t serial);
     void resize(wl_seat* seat, std::uint32_t serial, Edge edge);
     void minimize();
+
+    // Puts the window over another program's, exported by it with xdg-foreign v2 (handle, as the
+    // portal's "wayland:HANDLE" gives it after the colon), as a modal dialog where the compositor
+    // knows xdg-dialog. false when the compositor has no xdg-foreign: the window stays on its own.
+    bool set_parent(const std::string& handle);
     void toggle_maximized();
     // The compositor's window menu at (x, y), logical pixels in the window.
     void show_window_menu(wl_seat* seat, std::uint32_t serial, float x, float y);
@@ -252,6 +257,8 @@ private:
     WlPtr<xdg_surface> xdg_surface_;
     WlPtr<xdg_toplevel> toplevel_;
     WlPtr<zxdg_toplevel_decoration_v1> decoration_;
+    WlPtr<zxdg_imported_v2> parent_;  // the window it is over (set_parent)
+    WlPtr<xdg_dialog_v1> dialog_;
     WlPtr<wl_callback> frame_callback_;  // non-null while a frame is in flight
 
     // The drag image; its EGL surface is destroyed before the wl_egl_window and the surface.

@@ -74,6 +74,9 @@ public:
     // still watched and kept up to date.
     void set_filter(bool show_hidden, std::string keep);
 
+    // Only what `only` passes (Listing::set_only).
+    void set_only(Listing::Only only);
+
     [[nodiscard]] const std::filesystem::path& path() const noexcept { return path_; }
 
     [[nodiscard]] const Listing& listing() const noexcept { return listing_; }
@@ -93,6 +96,7 @@ public:
     [[nodiscard]] const std::error_code& error() const noexcept { return error_; }
 
 private:
+    void moved(Listing::Moved moved);  // tells the change handler what a filter moved
     void start_load();
     void stop();
     // The trash folder: read every trash on a worker, then apply the differences.

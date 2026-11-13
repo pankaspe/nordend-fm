@@ -66,6 +66,12 @@ public:
     // Optional: without it, applications Nordend starts may open without the focus.
     [[nodiscard]] xdg_activation_v1* activation() const noexcept { return activation_.get(); }
 
+    // Optional (GNOME, Plasma have them; Umbriel not): a window over another program's, as a
+    // file chooser over the application that asked, and the hint that it is a dialog.
+    [[nodiscard]] zxdg_importer_v2* importer() const noexcept { return importer_.get(); }
+
+    [[nodiscard]] xdg_wm_dialog_v1* wm_dialog() const noexcept { return wm_dialog_.get(); }
+
 private:
     static void on_global(void* data, wl_registry* registry, std::uint32_t name,
                           const char* interface, std::uint32_t version);
@@ -83,6 +89,8 @@ private:
     WlPtr<wp_fractional_scale_manager_v1> fractional_scale_manager_;
     WlPtr<wp_cursor_shape_manager_v1> cursor_shape_manager_;
     WlPtr<xdg_activation_v1> activation_;
+    WlPtr<zxdg_importer_v2> importer_;
+    WlPtr<xdg_wm_dialog_v1> wm_dialog_;
     WlPtr<wl_data_device_manager> data_device_manager_;
     WlPtr<wl_seat> seat_;
 };

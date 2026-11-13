@@ -324,7 +324,7 @@ TEST_CASE("grid: Enter opens a folder, Backspace the parent; the columns follow"
     CHECK(f.view.column(2).path() == f.root / "alpha" / "beta");
 }
 
-TEST_CASE("browser: with a cancel handler (nordend --pick), Escape cancels") {
+TEST_CASE("browser: choosing files (nordend --pick), Escape cancels") {
     Fixture f;
     int cancelled = 0;
     f.view.open(f.root);
@@ -334,7 +334,7 @@ TEST_CASE("browser: with a cancel handler (nordend --pick), Escape cancels") {
     f.press(XKB_KEY_Escape);  // without one: the selection is cleared, as always
     CHECK(f.view.focused_folder()->selected_names().size() <= 1);
 
-    f.browser.set_cancel_handler([&] { ++cancelled; });
+    f.browser.set_pick({}, [](auto&&...) {}, [&] { ++cancelled; });
     f.press(XKB_KEY_F1);  // what is on screen takes Escape first
     f.press(XKB_KEY_Escape);
     CHECK(cancelled == 0);

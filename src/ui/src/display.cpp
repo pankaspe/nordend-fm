@@ -21,6 +21,8 @@ constexpr std::uint32_t kShmVersion = 1;
 constexpr std::uint32_t kSeatVersion = 8;  // wl_pointer.axis_value120 (high-resolution wheels)
 constexpr std::uint32_t kCursorShapeManagerVersion = 1;
 constexpr std::uint32_t kActivationVersion = 1;
+constexpr std::uint32_t kImporterVersion = 1;
+constexpr std::uint32_t kWmDialogVersion = 1;
 constexpr std::uint32_t kDataDeviceManagerVersion = 3;  // wl_data_device.release
 
 template <class T>
@@ -123,6 +125,12 @@ void Display::on_global(void* data, wl_registry* registry, std::uint32_t name,
     } else if (iface == xdg_activation_v1_interface.name) {
         self.activation_.reset(bind<xdg_activation_v1>(registry, name, xdg_activation_v1_interface,
                                                        version, kActivationVersion));
+    } else if (iface == zxdg_importer_v2_interface.name) {
+        self.importer_.reset(bind<zxdg_importer_v2>(registry, name, zxdg_importer_v2_interface,
+                                                    version, kImporterVersion));
+    } else if (iface == xdg_wm_dialog_v1_interface.name) {
+        self.wm_dialog_.reset(bind<xdg_wm_dialog_v1>(registry, name, xdg_wm_dialog_v1_interface,
+                                                     version, kWmDialogVersion));
     } else if (iface == wl_data_device_manager_interface.name) {
         self.data_device_manager_.reset(bind<wl_data_device_manager>(
             registry, name, wl_data_device_manager_interface, version, kDataDeviceManagerVersion));

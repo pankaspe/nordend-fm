@@ -31,6 +31,7 @@ add_library(nordend_views
     src/shortcuts.cpp
     src/shortcuts_overlay.cpp
     src/sidebar.cpp
+    src/pick_bar.cpp
     src/status_bar.cpp
     src/state.cpp
     src/tab_bar.cpp

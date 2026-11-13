@@ -7,6 +7,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <optional>
 #include <sdbus-c++/sdbus-c++.h>
 #include <string>
 #include <string_view>
@@ -14,6 +15,7 @@
 #include <vector>
 
 #include "nordend/core/event_loop.hpp"
+#include "nordend/fs/file_filter.hpp"
 #include "nordend/platform/bus_loop.hpp"
 
 // Nordend as the desktop's file chooser (ROADMAP 4): the backend xdg-desktop-portal asks when an
@@ -33,28 +35,42 @@ inline constexpr std::uint32_t kResponseCancelled = 1;
 inline constexpr std::uint32_t kResponseOther = 2;
 
 using Options = std::map<std::string, sdbus::Variant>;
+// A filter as the portal sends it, (sa(us)): a label and rules, 0 = a glob, 1 = a MIME type.
+using FilterRule = sdbus::Struct<std::uint32_t, std::string>;
+using Filter = sdbus::Struct<std::string, std::vector<FilterRule>>;
 
 // What an application asked for, as far as Nordend follows it.
 struct PickRequest {
     std::string title;
+    std::string parent_window;  // "wayland:HANDLE"; other kinds are left out
+    std::string accept_label;   // "_Open"
     bool multiple{false};
-    bool directory{false};         // folders, not files (4b)
-    std::filesystem::path folder;  // where to start; empty: the picker's own choice
+    bool directory{false};              // folders, not files
+    std::filesystem::path folder;       // where to start; empty: the picker's own choice
+    std::vector<Filter> filters;        // as asked, to answer with the one in use
+    std::optional<std::size_t> filter;  // current_filter's place in filters
 };
 
-// OpenFile's arguments: options of another type than the spec's are left out.
-[[nodiscard]] PickRequest open_file_request(std::string title, const Options& options);
+// A portal filter as Nordend filters files (rules of another kind are left out).
+[[nodiscard]] fs::FileFilter file_filter(const Filter& filter);
 
-// The picker's command line after its program: --pick [--multiple] [--title TITLE] [FOLDER].
+// OpenFile's arguments: options of another type than the spec's are left out.
+[[nodiscard]] PickRequest open_file_request(std::string title, std::string parent_window,
+                                            const Options& options);
+
+// The picker's command line after its program: --pick [--multiple] [--folders] [--title TITLE]
+// [--accept-label TEXT] [--filter LABEL [--glob P]... [--mime T]...]... [--current-filter N]
+// [--parent wayland:HANDLE] [FOLDER].
 [[nodiscard]] std::vector<std::string> picker_arguments(const PickRequest& request);
 
 // What a picker gave back.
 struct PickResult {
     std::uint32_t response{kResponseOther};
     std::vector<std::string> uris;
+    std::optional<std::size_t> filter;  // "filter:N": the filter in use when it chose
 };
 
-// From the picker's output (one file:// URI a line; other lines are not ours and left out) and
+// From the picker's output (one file:// URI a line, "filter:N"; other lines are left out) and
 // its waitpid() status: URIs and a clean exit are a choice; a clean exit without URIs, or the
 // SIGTERM of a closed request, a cancel; anything else (an error exit, a crash) "other".
 [[nodiscard]] PickResult pick_result(std::string_view output, int wait_status);

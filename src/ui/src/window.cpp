@@ -408,6 +408,26 @@ void Window::resize(wl_seat* seat, std::uint32_t serial, Edge edge) {
 
 void Window::minimize() { xdg_toplevel_set_minimized(toplevel_.get()); }
 
+bool Window::set_parent(const std::string& handle) {
+    if (display_.importer() == nullptr || handle.empty()) {
+        return false;
+    }
+    parent_.reset(zxdg_importer_v2_import_toplevel(display_.importer(), handle.c_str()));
+    static const zxdg_imported_v2_listener kListener{
+        .destroyed =
+            [](void* /*data*/, zxdg_imported_v2* /*imported*/) {
+                log::info("window: the window it was over went away");
+            },
+    };
+    zxdg_imported_v2_add_listener(parent_.get(), &kListener, nullptr);
+    zxdg_imported_v2_set_parent_of(parent_.get(), surface_.get());
+    if (display_.wm_dialog() != nullptr) {
+        dialog_.reset(xdg_wm_dialog_v1_get_xdg_dialog(display_.wm_dialog(), toplevel_.get()));
+        xdg_dialog_v1_set_modal(dialog_.get());
+    }
+    return true;
+}
+
 void Window::toggle_maximized() {
     if (state_.maximized) {
         xdg_toplevel_unset_maximized(toplevel_.get());

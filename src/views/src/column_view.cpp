@@ -44,8 +44,15 @@ ColumnView::~ColumnView() {
 }
 
 std::unique_ptr<Column> ColumnView::make_column(const std::filesystem::path& directory) {
-    return make_column(
-        std::make_shared<Folder>(loop_, pool_, watcher_, mime_, directory, redraw_, show_hidden_));
+    return make_column(std::make_shared<Folder>(loop_, pool_, watcher_, mime_, directory, redraw_,
+                                                show_hidden_, only_));
+}
+
+void ColumnView::set_only(fs::Listing::Only only) {
+    only_ = std::move(only);
+    for (const Slot& slot : columns_) {
+        slot.column->folder().set_only(only_);
+    }
 }
 
 void ColumnView::set_show_hidden(bool show) {

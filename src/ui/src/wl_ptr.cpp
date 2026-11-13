@@ -58,6 +58,14 @@ void destroy(wp_fractional_scale_v1* scale) noexcept { wp_fractional_scale_v1_de
 
 void destroy(xdg_activation_v1* activation) noexcept { xdg_activation_v1_destroy(activation); }
 
+void destroy(zxdg_importer_v2* importer) noexcept { zxdg_importer_v2_destroy(importer); }
+
+void destroy(zxdg_imported_v2* imported) noexcept { zxdg_imported_v2_destroy(imported); }
+
+void destroy(xdg_wm_dialog_v1* manager) noexcept { xdg_wm_dialog_v1_destroy(manager); }
+
+void destroy(xdg_dialog_v1* dialog) noexcept { xdg_dialog_v1_destroy(dialog); }
+
 void destroy(xdg_activation_token_v1* token) noexcept { xdg_activation_token_v1_destroy(token); }
 
 void destroy(wl_data_device_manager* manager) noexcept { wl_data_device_manager_destroy(manager); }

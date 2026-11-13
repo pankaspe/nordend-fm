@@ -68,6 +68,9 @@ public:
     // Dotfiles listed or left out (hidden at first), in the folder shown and the ones it opens.
     void set_show_hidden(bool show);
 
+    // Only what a file chooser's filter passes, in every folder shown (empty: everything).
+    void set_only(fs::Listing::Only only);
+
     // Where a drag over the window would drop (the browser's).
     void set_drop_mark(const DropMark* drop) { drop_ = drop; }
 
@@ -200,6 +203,7 @@ private:
 
     std::shared_ptr<Folder> folder_;
     bool show_hidden_{false};
+    fs::Listing::Only only_;
     const DropMark* drop_{nullptr};
     fs::SortOrder order_;
     std::function<void(const fs::SortOrder&)> sorted_;

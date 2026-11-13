@@ -16,6 +16,7 @@
 #include "nordend/core/worker_pool.hpp"
 #include "nordend/fs/directory_model.hpp"
 #include "nordend/fs/directory_watcher.hpp"
+#include "nordend/fs/file_filter.hpp"
 #include "nordend/fs/mime.hpp"
 #include "nordend/fs/places.hpp"
 #include "nordend/fs/transfer_queue.hpp"
@@ -41,6 +42,7 @@
 #include "nordend/views/info_pane.hpp"
 #include "nordend/views/name_editor.hpp"
 #include "nordend/views/pane.hpp"
+#include "nordend/views/pick_bar.hpp"
 #include "nordend/views/quick_look.hpp"
 #include "nordend/views/shortcuts.hpp"
 #include "nordend/views/shortcuts_overlay.hpp"
@@ -466,9 +468,36 @@ public:
     // Quits Nordend (the palette's "Quit"; Ctrl+Q is the app's). Without one, no "Quit".
     void set_quit_handler(std::function<void()> quit) { quit_ = std::move(quit); }
 
-    // Choosing files for an application (nordend --pick): Escape, once nothing on screen takes
-    // it (a menu, a dialog, Quick Look), cancels instead of clearing the selection.
-    void set_cancel_handler(std::function<void()> cancel) { cancel_ = std::move(cancel); }
+    // Choosing files for an application (nordend --pick, the desktop's file chooser).
+    struct Pick {
+        bool multiple{false};
+        bool folders{false};                  // folders are chosen; files are not listed
+        std::string accept_label;             // the application's word ("_Open"); empty: ours
+        std::vector<fs::FileFilter> filters;  // empty: every file
+        std::size_t filter{0};                // the one in use at first
+    };
+
+    // What was chosen: the paths, and the filter in use (nullopt without filters).
+    using Chosen = std::function<void(std::vector<std::filesystem::path> paths,
+                                      std::optional<std::size_t> filter)>;
+
+    // From now on Enter or a double click on a file (with Pick::multiple, the selected files),
+    // Ctrl+Enter and the bar's button choose; Escape (once nothing on screen takes it: a menu, a
+    // dialog, Quick Look) and Cancel cancel. A bar over the status bar shows the filter and the
+    // buttons. Folders open as always; with Pick::folders, Ctrl+Enter and the button choose the
+    // folder under the cursor, else the one shown.
+    void set_pick(Pick pick, Chosen chosen, std::function<void()> cancel);
+
+    [[nodiscard]] bool picking() const noexcept { return pick_.has_value(); }
+
+    // The filter in use (nullopt without filters); another one, as the bar's list does.
+    [[nodiscard]] std::optional<std::size_t> pick_filter() const;
+    void set_pick_filter(std::size_t index);
+
+    // The bar's button: what Ctrl+Enter does.
+    void accept_pick();
+
+    [[nodiscard]] const PickBar& pick_bar() const noexcept { return pick_bar_; }
 
     // "New File": makes name (from a template when from is set) in the folder shown, puts the
     // cursor on it and edits its name.
@@ -611,6 +640,10 @@ private:
     // Opens the selected files when the cursor is on a file (only the cursor's when it is not
     // selected); false when the cursor is on a folder or nowhere.
     bool open_selection();
+    // Hands paths to chosen_ (one only without Pick::multiple).
+    void choose(std::vector<std::filesystem::path> paths);
+    void apply_pick_filter();
+    void show_pick_filters(float x, float y);
     // F4: a terminal in the cursor's folder, else in the folder shown.
     void open_terminal();
     void rename(const std::shared_ptr<Folder>& folder, const std::string& from,
@@ -629,7 +662,15 @@ private:
     void view_pointer(const ui::PointerEvent& event, Clock::time_point now);
 
     // Who gets the pointer: the view, the sidebar or the breadcrumb above the view.
-    enum class Target : std::uint8_t { view, sidebar, breadcrumb, status_bar, tabs, header };
+    enum class Target : std::uint8_t {
+        view,
+        sidebar,
+        breadcrumb,
+        status_bar,
+        pick_bar,
+        tabs,
+        header
+    };
 
     // Back and forward in the header: -1, 1, or 0 for neither.
     [[nodiscard]] int navigation_at(float x, float y) const;
@@ -689,6 +730,7 @@ private:
     Breadcrumb breadcrumb_;
     TabBar tab_bar_;
     StatusBar status_bar_;
+    PickBar pick_bar_;
     ShortcutsOverlay shortcuts_;
     NameEditor editor_;
     ConflictDialog conflict_;
@@ -707,6 +749,9 @@ private:
     std::optional<FoundAfter> found_after_;
     std::function<void()> quit_;
     std::function<void()> cancel_;
+    std::optional<Pick> pick_;
+    Chosen chosen_;
+    fs::Listing::Only only_;            // what the chooser's filter lets the views list
     std::uint64_t menu_generation_{0};  // a submenu found late fills only the menu it was for
     std::size_t menu_loads_{0};         // applications and templates being looked for
     std::vector<std::function<void()>> menu_loaders_;  // started once the menu is open

@@ -88,6 +88,9 @@ public:
     // before the focused one keep the hidden entry that leads on, the others move their cursor.
     void set_show_hidden(bool show);
 
+    // Only what a file chooser's filter passes, in every folder shown (empty: everything).
+    void set_only(fs::Listing::Only only);
+
     // The order of every folder the columns show, now and later (the window's: Browser::set_sort).
     void set_order(const fs::SortOrder& order);
 
@@ -217,6 +220,7 @@ private:
     std::shared_ptr<Folder> adopt_;  // the folder show() unfolds to, used as its column
     bool suspended_{false};
     bool show_hidden_{false};
+    fs::Listing::Only only_;
     fs::SortOrder order_;
     std::size_t list_size_{kUsualListSize};
     float zoom_wheel_{0.0F};  // Ctrl+wheel notches not yet turned into a step
