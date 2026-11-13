@@ -4,6 +4,20 @@ Work log, newest first. Each entry: what was done, decisions, measurements, open
 
 ---
 
+## 2026-11-13 — Nordend 0.6.1
+
+A patch release on 0.6.0's header: rounded corners and a shadow as GTK draws them, square
+corners on request (`[window] corner_radius`), a see-through background (`[window]
+background_opacity`, barrulus's PR #3), a clean exit at logout with the session saved, and
+`eject`'s callback. CMake version, README (badges, note, install note, Versions, What's next,
+At a glance) and features say so. At a glance: nordend 4.09 MB / 3.42 stripped, the helper
+1.15 / 1.03, `readelf -d` NEEDED 17 and 8, 52 800 + 18 800 lines, 450 tests (doctest: 449
+passed + 1 skipped); memory not re-measured (nothing in this release allocates at start). The
+engine protocol is still 4; no parser changed, so no new fuzz run. Also: the three clang-tidy
+style warnings in PR #3's tests fixed.
+
+---
+
 ## 2026-11-13 — A see-through background, by barrulus (0.6.1)
 
 **Tested by the author** (2026-11-13, PR #3 installed from its branch, Umbriel): 0.7 live,
@@ -29,10 +43,6 @@ README paragraph moved into `config.example.toml`'s comment.
 
 **Measured** (`nordend-snapshot --bench 2000`, framed, 2560x1440): median 0.33 ms a frame on
 `main` and on the PR, at 1.0 and at 0.7: no measurable cost.
-
-**Open**
-- clang-tidy: three style warnings in the PR's tests (`renderer_runs_test.cpp:164-165`, a
-  computed array index; `window_frame_test.cpp:151`, parentheses).
 
 ---
 

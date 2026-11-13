@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/pankaspe/nordend-fm/releases/tag/v0.6.0"><img src="https://img.shields.io/badge/release-v0.6.0-2a6a9e" alt="release v0.6.0"></a>
+  <a href="https://github.com/pankaspe/nordend-fm/releases/tag/v0.6.1"><img src="https://img.shields.io/badge/release-v0.6.1-2a6a9e" alt="release v0.6.1"></a>
   <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white" alt="C++20">
   <img src="https://img.shields.io/badge/Wayland-native-FFBC00?logo=wayland&logoColor=black" alt="Wayland native">
-  <img src="https://img.shields.io/badge/tests-438%20%C2%B7%20ASan%20%C2%B7%20TSan-4B32C3" alt="438 tests, ASan, TSan">
+  <img src="https://img.shields.io/badge/tests-450%20%C2%B7%20ASan%20%C2%B7%20TSan-4B32C3" alt="450 tests, ASan, TSan">
   <a href="https://github.com/pankaspe/nordend-fm/actions/workflows/ci.yml"><img src="https://github.com/pankaspe/nordend-fm/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <img src="https://img.shields.io/badge/license-MIT-3DA639" alt="MIT license">
 </p>
@@ -21,8 +21,10 @@
 > **Young software, used every day by its author.** Since 0.5.0 Nordend opens **text files** in
 > Quick Look with **syntax colours** for over twenty languages (code, configuration, Markdown,
 > diffs), to select and copy; read, like pictures since 0.4.0, by Nordend's own code in a
-> **caged helper process**. 0.6.0 **follows your theme's colours by itself**, as GTK apps do,
-> and draws **one header**: the path, back and forward and the window's buttons in one row.
+> **caged helper process**. 0.6 **follows your theme's colours by itself**, as GTK apps do,
+> and draws **one header**: the path, back and forward and the window's buttons in one row;
+> 0.6.1 gives it **rounded corners and a shadow** (or square ones), and a see-through
+> background if you want one.
 > On Void Linux, [install it as a package](#on-void-linux); on NixOS or with Nix, from
 > [its flake](#on-nixos-and-with-nix); anywhere else, [build it from source](#from-source) in
 > about a minute.
@@ -103,9 +105,9 @@ every shortcut.
 
 | | |
 |---|---|
-| Binary | **4.09 MB** (3.41 MB stripped), x86-64; the decoders and text readers in `nordend-preview`, 1.15 MB (1.03 stripped), a separate caged helper |
+| Binary | **4.09 MB** (3.42 MB stripped), x86-64; the decoders and text readers in `nordend-preview`, 1.15 MB (1.03 stripped), a separate caged helper |
 | Libraries | 17 direct (the helper: 8); no GTK, no Qt, no GLib |
-| Code | about 52 300 lines of C++20, 18 300 of tests (438 test cases, under ASan and TSan too) |
+| Code | about 52 800 lines of C++20, 18 800 of tests (450 test cases, under ASan and TSan too) |
 | Memory | **25 MB** of its own at start; pictures are decoded in the helpers, which give their memory back after a quiet second |
 | Idle | **0 CPU**: nothing is drawn while nothing moves |
 
@@ -146,7 +148,7 @@ cp -r /tmp/nordend-fm/packaging/void/nordend srcpkgs/
 sudo xbps-install -R hostdir/binpkgs nordend
 ```
 
-The package is the latest release, **0.6.0**. What `main` gains after it comes with the next
+The package is the latest release, **0.6.1**. What `main` gains after it comes with the next
 release; to have it at once, build from source.
 
 ### On NixOS and with Nix
@@ -226,7 +228,7 @@ settled.
 
 | Version | What it brought |
 |---|---|
-| on `main`, next | Rounded corners and a soft shadow around Nordend's own header, as GTK draws them (square with `[window] corner_radius = 0`); the shadow's edge resizes the window; a see-through background with solid text, icons and pictures (`[window] background_opacity`, by barrulus); a clean exit at logout, with the session's tabs and views saved, when the session bus goes first (GNOME) |
+| [0.6.1](https://github.com/pankaspe/nordend-fm/releases/tag/v0.6.1), 2026-11-13 | Rounded corners and a soft shadow around Nordend's own header, as GTK draws them (square with `[window] corner_radius = 0`); the shadow's edge resizes the window; a see-through background with solid text, icons and pictures (`[window] background_opacity`, by barrulus); a clean exit at logout, with the session's tabs and views saved, when the session bus goes first (GNOME) |
 | [0.6.0](https://github.com/pankaspe/nordend-fm/releases/tag/v0.6.0), 2026-11-13 | Colours from your theme with nothing to set up, read as GTK apps read them (Noctalia, Stylix, matugen, your own `gtk.css`), live; one header, as in a modern file manager: the sidebar to the top, back and forward, the path and the window's buttons in one row (`[window] title_bar = "compositor"` for the compositor's bar), tried on Umbriel, GNOME and Plasma |
 | [0.5.1](https://github.com/pankaspe/nordend-fm/releases/tag/v0.5.1), 2026-11-13 | Grid thumbnails up to 512 px, sharp from the larger caches (icons stay at 256); builds hardened on every system (stack protection, full RELRO, `_FORTIFY_SOURCE=3`, the standard library's index checks); a Nix flake, built and tested in Nix's sandbox on every push; sorting by type puts a file whose name has several types (`.md` with shared-mime-info 2.5) among its likely type |
 | [0.5.0](https://github.com/pankaspe/nordend-fm/releases/tag/v0.5.0), 2026-11-09 | Text previews: text files in Quick Look and the info pane, read in the caged helper (UTF-8, UTF-16, Latin-1) with syntax colours from your theme for C, C++, Rust, Python, JavaScript, TypeScript, Lua, Luau, shell (heredocs included), fish, CMake, Makefiles, JSON, TOML, YAML, INI files and desktop entries, `.gitignore` and `.gitattributes`, Markdown (code blocks in their own language) and diffs; select with the pointer, Ctrl+A, Ctrl+C; long lines scroll sideways; Home, End, Page Up and Page Down; a caption with the language, encoding and line ends; minified files shown plain; logs opened at their newest lines. The helper became the first engine, described by a manifest |
@@ -247,7 +249,8 @@ lists; 0.3.0 the command palette (<kbd>Ctrl</kbd>+<kbd>K</kbd>) and finding file
 (<kbd>Ctrl</kbd>+<kbd>F</kbd>); 0.3.1 more raw previews; 0.4.0 image previews read by Nordend's own
 code in caged helpers; 0.5.0 text previews with syntax colours, selecting and copying; 0.5.1
 grid thumbnails up to 512 px, hardened builds and a Nix flake; 0.6.0 the colours of your theme
-with nothing to set up and one header for the whole window. Coming, roughly in this order:
+with nothing to set up and one header for the whole window; 0.6.1 rounded corners and a shadow
+around it, square corners or a see-through background on request. Coming, roughly in this order:
 **a file chooser for other applications** (the desktop portal's, with the grid and thumbnails);
 then **previews, one family at a time**: other common formats one by one (SVG, AVIF, fonts,
 archive contents, audio tags).
