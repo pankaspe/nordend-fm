@@ -56,9 +56,9 @@ public:
     // With margin > 0 (logical pixels), the window's content is the buffer less a margin on every
     // side: the whole buffer is cleared transparent, the content to clear, and every draw and
     // clip until end_frame takes the content's top-left as (0, 0). Without, the content is the
-    // whole buffer, cleared opaque.
+    // whole buffer. Background opacity affects the content clear and fill_background only.
     void begin_frame(std::int32_t buffer_width, std::int32_t buffer_height, float scale,
-                     Color clear, float margin = 0.0F);
+                     Color clear, float margin = 0.0F, float background_opacity = 1.0F);
     void end_frame();
 
     // With a margin: rounds the content's corners to radius, then puts outline (one pixel
@@ -76,6 +76,10 @@ public:
     void draw_box(const Rect& rect, const BoxStyle& style);
 
     void fill_rect(const Rect& rect, Color color) { draw_box(rect, {.fill = color}); }
+
+    // Replaces the base background inside rect, respecting clips and background opacity.
+    // Draw before foreground content: overlapping panels must not accumulate alpha.
+    void fill_background(const Rect& rect, Color color);
 
     // Soft shadow of a rounded box; blur is the Gaussian sigma in logical pixels. Offset the
     // rect to move the shadow.
@@ -135,6 +139,7 @@ private:
     std::int32_t view_width_{0};
     std::int32_t view_height_{0};
     float scale_{1.0F};
+    float background_opacity_{1.0F};
 };
 
 }  // namespace nordend::ui

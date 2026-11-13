@@ -1,6 +1,9 @@
 // Nordend's own header (ROADMAP 3⅞): the Browser's path row as the window's header, the title
 // bar's buttons on it, and where the window moves from.
+#include <GLES3/gl3.h>
+#include <array>
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -307,4 +310,44 @@ TEST_CASE("palette: the header's colour, from colors.toml or GTK's header bar") 
         nordend::theme::gtk_palette(gtk, true).value_or(nordend::theme::Palette{});
     CHECK(p.header == Color::rgb(0x303336));
     CHECK(p.surface_container_low == Color::rgb(0x202325));  // the sidebar, not the header bar
+}
+
+TEST_CASE("header: opacity preserves the header palette and sidebar background") {
+    Fixture f;
+    if (!f.gl) {
+        return;
+    }
+    REQUIRE(f.open(f.root));
+    nordend::theme::Palette palette;
+    palette.header = nordend::ui::Color::rgb(0xFF0000);
+    palette.surface_container_low = nordend::ui::Color::rgb(0x00FF00);
+    for (const float opacity : {0.0F, 0.5F, 1.0F}) {
+        CAPTURE(opacity);
+        f.renderer->begin_frame(static_cast<std::int32_t>(kWidth),
+                                static_cast<std::int32_t>(kHeight), 1.0F,
+                                nordend::ui::Color::rgb(0x0000FF), 0.0F, opacity);
+        f.browser.draw(*f.renderer, {0, 0, kWidth, kHeight}, palette, *f.icons,
+                       Browser::Clock::now());
+        f.renderer->end_frame();
+        const auto pixel = [](int x, int y) {
+            std::array<std::uint8_t, 4> rgba{};
+            glReadPixels(x, static_cast<int>(kHeight) - 1 - y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE,
+                         rgba.data());
+            return rgba;
+        };
+        // Blank header space reserved for buttons, and the sidebar above and below the header.
+        const auto header = pixel(900, 2);
+        CHECK(header[0] == header[3]);
+        CHECK(header[1] == 0);
+        CHECK(header[2] == 0);
+        for (const int y : {2, 100}) {
+            const auto sidebar = pixel(2, y);
+            CHECK(sidebar[0] == 0);
+            CHECK(sidebar[1] == sidebar[3]);
+            CHECK(sidebar[2] == 0);
+            CHECK(sidebar[3] == doctest::Approx(static_cast<double>(opacity) * 255).epsilon(0.005));
+        }
+        CHECK(header[3] == doctest::Approx(static_cast<double>(opacity) * 255).epsilon(0.005));
+        CHECK(glGetError() == GL_NO_ERROR);
+    }
 }

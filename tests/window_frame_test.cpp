@@ -1,5 +1,6 @@
 #include <GLES3/gl3.h>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -115,4 +116,57 @@ TEST_CASE("window frame: none without a margin") {
     glReadPixels(0, 0, kWidth, kHeight, GL_RGBA, GL_UNSIGNED_BYTE, pixels.rgba.data());
     CHECK(pixels.at(0, 0) == std::array<std::uint8_t, 4>{255, 0, 0, 255});
     CHECK(pixels.at(kWidth - 1, kHeight - 1) == std::array<std::uint8_t, 4>{255, 0, 0, 255});
+}
+
+TEST_CASE("window frame: translucent content does not reveal the outline or shadow") {
+    const std::unique_ptr<ui::Offscreen> gl = offscreen();
+    if (!gl) {
+        return;
+    }
+    ui::FontSystem fonts;
+    ui::Renderer renderer{fonts};
+    for (const float scale : {1.0F, 1.25F, 1.5F, 2.0F}) {
+        CAPTURE(scale);
+        const auto m = static_cast<std::int32_t>(std::lround(kMargin * scale));
+        const auto r = static_cast<std::int32_t>(WindowFrame::kRadius * scale);
+        for (const float opacity : {0.0F, 0.5F, 1.0F}) {
+            CAPTURE(opacity);
+            for (const bool active : {false, true}) {
+                CAPTURE(active);
+                renderer.begin_frame(kWidth, kHeight, scale, ui::Color::rgb(0xFF0000), kMargin,
+                                     opacity);
+                // A background replacement uses content coordinates, too.
+                renderer.fill_background({0, 0, 200, 140}, ui::Color::rgb(0x00FF00));
+                renderer.fill_rect({20, 12, 4, 4}, ui::Color::rgb(0x0000FF));
+                WindowFrame::draw(renderer, active);
+                renderer.end_frame();
+                Pixels pixels;
+                glReadPixels(0, 0, kWidth, kHeight, GL_RGBA, GL_UNSIGNED_BYTE, pixels.rgba.data());
+                // The first content pixel at every straight edge, and inside a rounded corner.
+                for (const auto& [x, y] :
+                     std::array<std::array<std::int32_t, 2>, 5>{{{m, kHeight / 2},
+                                                                 {kWidth - m - 1, kHeight / 2},
+                                                                 {kWidth / 2, m},
+                                                                 {kWidth / 2, kHeight - m - 1},
+                                                                 {m + r / 2, m + r / 3}}}) {
+                    CAPTURE(x);
+                    CAPTURE(y);
+                    const auto pixel = pixels.at(x, y);
+                    CHECK(pixel[0] == 0);
+                    CHECK(pixel[1] == pixel[3]);
+                    CHECK(pixel[2] == 0);
+                    CHECK(pixel[3] ==
+                          doctest::Approx(static_cast<double>(opacity) * 255).epsilon(0.005));
+                }
+                CHECK(
+                    pixels.at(m + static_cast<int>(22 * scale), m + static_cast<int>(14 * scale)) ==
+                    std::array<std::uint8_t, 4>{0, 0, 255, 255});
+                CHECK(pixels.at(m - 1, kHeight / 2)[3] > 0);           // outline survives
+                CHECK(pixels.at(kWidth / 2, kHeight - m + 6)[3] > 0);  // shadow survives
+                CHECK(pixels.at(0, 0)[3] == 0);                        // buffer margin stays clear
+                CHECK(pixels.at(kWidth - 1, kHeight - 1)[3] == 0);
+                CHECK(glGetError() == GL_NO_ERROR);
+            }
+        }
+    }
 }

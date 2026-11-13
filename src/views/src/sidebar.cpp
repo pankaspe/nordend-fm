@@ -144,7 +144,7 @@ void Sidebar::draw(ui::Renderer& renderer, const ui::Rect& bounds, const theme::
                    Clock::time_point now) {
     bounds_ = bounds;
     current_ = place_holding(places_, current);
-    renderer.fill_rect(bounds, palette.surface_container_low);
+    renderer.fill_background(bounds, palette.surface_container_low);
     scroller_.set_extent(content_height_, bounds.height);
     scroller_.advance(now);
     const float offset = scroller_.offset();

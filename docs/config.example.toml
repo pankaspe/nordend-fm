@@ -1,8 +1,8 @@
 # Nordend configuration: ~/.config/nordend/config.toml ($XDG_CONFIG_HOME/nordend/config.toml).
 # Every key is optional; the values below are the defaults. A bad value is reported in the log
 # and keeps its default. Check a file without starting Nordend: nordend --check-config
-# Nordend reads the file again when it changes: the double click and the icon at once, the fonts
-# at the next start.
+# Nordend reads the file again when it changes: background opacity, double click and the icon
+# at once, fonts at the next start.
 #
 # Colours are not set here: Nordend follows your theme by itself (GTK's colours in
 # ~/.config/gtk-4.0/gtk.css, else the desktop's light or dark style and accent). For exact colours
@@ -28,6 +28,10 @@ double_click_distance = 4
 # path and the window's buttons share one row. "compositor": the compositor's title bar instead,
 # where it draws one (the path back in its own row). Read at the next start.
 title_bar = "integrated"
+# Background only (0-1), read live; text, icons and thumbnails retain their original opacity.
+# Transparency is disabled by default (1.0). Keep compositor window opacity at 1.0.
+# Compositor blur can still be enabled.
+background_opacity = 1.0
 
 [icon]
 # Nordend's icon in your theme's accent colour (GTK's colours, GNOME's or Plasma's accent):

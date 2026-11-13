@@ -36,6 +36,7 @@ struct WindowOptions {
     bool force_client_decorations{false};
     // Rounded corners and a shadow when the window draws its own decorations (WindowFrame).
     bool frame{false};
+    float background_opacity{1.0F};
 };
 
 // A window edge or corner, grabbed to resize the window.
@@ -115,6 +116,11 @@ public:
     // Color the frame is cleared to before the draw handler runs; redraws.
     void set_background(Color color) {
         background_ = color;
+        request_redraw();
+    }
+
+    void set_background_opacity(float opacity) {
+        background_opacity_ = opacity;
         request_redraw();
     }
 
@@ -214,13 +220,14 @@ private:
     bool frame_wanted_{false};
     std::int32_t margin_{0};        // the frame's, for the next frame
     std::int32_t drawn_margin_{0};  // the frame's, as last drawn
-    // What update_surface_regions last told the compositor: width, height, margin.
-    std::array<std::int32_t, 3> regions_for_{-1, -1, -1};
+    // What update_surface_regions last told the compositor: width, height, margin, opaque.
+    std::array<std::int32_t, 4> regions_for_{-1, -1, -1, -1};
     bool decoration_answered_{false};  // the compositor said which, at least once
     WindowState state_;
     WindowState pending_state_;  // from configure, applied with its ack
     std::string title_;
     Color background_;
+    float background_opacity_;
     DrawHandler draw_handler_;
     std::function<void()> close_handler_;
     std::function<void()> frame_shown_handler_;

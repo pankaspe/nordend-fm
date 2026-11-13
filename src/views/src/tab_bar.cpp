@@ -33,7 +33,7 @@ void TabBar::draw(ui::Renderer& renderer, const ui::Rect& bounds, const theme::P
     if (hovered_ && hovered_->part != Part::add && hovered_->index >= titles.size()) {
         hovered_.reset();  // that tab went away
     }
-    renderer.fill_rect(bounds, palette.surface_container_low);
+    renderer.fill_background(bounds, palette.surface_container_low);
 
     const float room = std::max(0.0F, bounds.width - (2.0F * kPadding) - kAddSize - kGap);
     const float count = static_cast<float>(std::max<std::size_t>(titles.size(), 1));

@@ -83,7 +83,8 @@ Window::Window(Display& display, EglContext& egl, FontSystem& fonts, const Windo
       height_{options.height},
       frame_wanted_{options.frame},
       title_{options.title},
-      background_{options.background} {
+      background_{options.background},
+      background_opacity_{options.background_opacity} {
     surface_.reset(wl_compositor_create_surface(display_.compositor()));
 
     static constexpr xdg_surface_listener kSurfaceListener{
@@ -201,7 +202,7 @@ void Window::draw() {
 
     eglMakeCurrent(egl_.display(), egl_surface_, egl_surface_, egl_.context());
     renderer_->begin_frame(buffer_width_, buffer_height_, static_cast<float>(scale()), background_,
-                           static_cast<float>(margin_));
+                           static_cast<float>(margin_), background_opacity_);
     if (draw_handler_) {
         draw_handler_(*renderer_,
                       Rect{0.0F, 0.0F, static_cast<float>(width_), static_cast<float>(height_)});
@@ -270,7 +271,8 @@ void Window::update_buffer_size() {
 }
 
 void Window::update_surface_regions() {
-    const std::array<std::int32_t, 3> wanted{width_, height_, margin_};
+    const bool is_opaque = background_opacity_ >= 1.0F;
+    const std::array<std::int32_t, 4> wanted{width_, height_, margin_, is_opaque ? 1 : 0};
     if (wanted == regions_for_) {
         return;
     }
@@ -288,6 +290,12 @@ void Window::update_surface_regions() {
         wl_region_destroy(input);
     } else {
         wl_surface_set_input_region(surface_.get(), nullptr);  // the whole surface
+    }
+
+    // Transparency can change on config reload without changing the window geometry.
+    if (!is_opaque) {
+        wl_surface_set_opaque_region(surface_.get(), nullptr);
+        return;
     }
 
     // Opaque: the window but its rounded corners, so the compositor need not blend it.

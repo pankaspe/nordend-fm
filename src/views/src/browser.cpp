@@ -2107,7 +2107,7 @@ void Browser::draw(ui::Renderer& renderer, const ui::Rect& bounds, const theme::
         if (own_header) {
             // The sidebar runs to the window's top: beside the header, only its colour.
             sidebar_top_ = {side.x, side.y, side.width, std::min(kTitleHeight, side.height)};
-            renderer.fill_rect(sidebar_top_, palette.surface_container_low);
+            renderer.fill_background(sidebar_top_, palette.surface_container_low);
             renderer.fill_rect({sidebar_top_.right() - (1.0F / renderer.scale()), sidebar_top_.y,
                                 1.0F / renderer.scale(), sidebar_top_.height},
                                palette.outline_variant);
@@ -2122,7 +2122,7 @@ void Browser::draw(ui::Renderer& renderer, const ui::Rect& bounds, const theme::
     ui::Rect view{bounds.x + sidebar_width, bounds.y, bounds.width - sidebar_width, bounds.height};
     if (own_header && view.height > 0.0F) {
         header_ = {view.x, view.y, view.width, std::min(kTitleHeight, view.height)};
-        renderer.fill_rect(header_, palette.header);
+        renderer.fill_background(header_, palette.header);
         draw_navigation(renderer, palette, icons);
         view.y += header_.height;
         view.height -= header_.height;
