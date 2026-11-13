@@ -32,7 +32,7 @@
 // compositor leaves the title bar to Nordend; STATE is
 // comma-separated words: "normal", "maximized", "inactive", "no-minimize", and "hover-close",
 // "hover-maximize", "press-close" for the pointer over a button, "framed" for the rounded corners
-// and the shadow (ui::WindowFrame) over a grey backdrop.
+// and the shadow (ui::WindowFrame) over a grey backdrop, "square" for square corners with it.
 // --desktop draws with the palette made from a desktop's look, as without colors.toml under GNOME
 // or Plasma: LOOK is "dark" or "light", with an accent after a comma: "dark,#3584e4".
 // --gtk draws with the palette made from a gtk.css's colours (and what it imports), as Nordend
@@ -464,7 +464,9 @@ int main(int argc, char** argv) {
                     nordend::app::draw_test_scene(renderer, bounds, palette.palette);
                 }
                 if (framed) {
-                    ui::WindowFrame::draw(renderer, csd->find("inactive") == std::string::npos);
+                    ui::WindowFrame::draw(
+                        renderer, csd->find("inactive") == std::string::npos,
+                        csd->find("square") == std::string::npos ? ui::WindowFrame::kRadius : 0.0F);
                 }
                 renderer.end_frame();
             };

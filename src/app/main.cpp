@@ -409,7 +409,8 @@ int main(int argc, char** argv) {
                  client_decorations_forced() ||
                  config.window.title_bar == core::Config::Window::TitleBar::integrated,
              .frame = true,
-             .background_opacity = config.window.background_opacity}};
+             .background_opacity = config.window.background_opacity,
+             .corner_radius = static_cast<float>(config.window.corner_radius)}};
         startup.mark("window");
         ui::Seat seat{display};
         seat.set_multi_click(std::chrono::milliseconds{config.pointer.double_click_ms},
@@ -447,11 +448,12 @@ int main(int argc, char** argv) {
         // The column view and the grid (ROADMAP 4.2, 4.4), unless the renderer test scene was
         // asked for.
         std::unique_ptr<views::Browser> columns;
-        // config.toml is followed while Nordend runs: the double click changes at once, the
-        // fonts at the next start (`config` keeps the ones in use).
+        // config.toml is followed while Nordend runs: the double click and the corners change at
+        // once, the fonts at the next start (`config` keeps the ones in use).
         std::unique_ptr<core::FileWatcher> config_watcher;
         const auto apply_config = [&](const core::Config& fresh) {
             window.set_background_opacity(fresh.window.background_opacity);
+            window.set_corner_radius(static_cast<float>(fresh.window.corner_radius));
             seat.set_multi_click(std::chrono::milliseconds{fresh.pointer.double_click_ms},
                                  static_cast<float>(fresh.pointer.double_click_distance));
             follow_accent = fresh.icon.follow_accent;

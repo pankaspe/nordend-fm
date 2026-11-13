@@ -37,6 +37,7 @@ struct WindowOptions {
     // Rounded corners and a shadow when the window draws its own decorations (WindowFrame).
     bool frame{false};
     float background_opacity{1.0F};
+    float corner_radius{12.0F};  // the frame's corners, logical pixels (WindowFrame::kRadius)
 };
 
 // A window edge or corner, grabbed to resize the window.
@@ -76,14 +77,15 @@ struct WindowState {
 struct WindowFrame {
     static constexpr std::int32_t kMargin = 24;  // logical pixels on every side
     static constexpr float kResizeBand = 10.0F;  // of the margin, what resizes the window
-    static constexpr float kRadius = 12.0F;
+    static constexpr float kRadius = 12.0F;      // the default
 
     // The margin the window takes in state (0 = no frame).
     [[nodiscard]] static std::int32_t margin(const WindowState& state, bool client_decorations,
                                              bool wanted) noexcept;
 
-    // Draws the frame around the content drawn with a margin (Renderer::frame_window).
-    static void draw(Renderer& renderer, bool activated);
+    // Draws the frame around the content drawn with a margin (Renderer::frame_window); a radius
+    // of 0 keeps the corners square, with the same outline and shadow.
+    static void draw(Renderer& renderer, bool activated, float radius = kRadius);
 };
 
 // A top-level xdg-shell window rendered with OpenGL ES, with server-side decorations when the
@@ -121,6 +123,12 @@ public:
 
     void set_background_opacity(float opacity) {
         background_opacity_ = opacity;
+        request_redraw();
+    }
+
+    // The frame's corners (logical pixels, 0 = square); redraws.
+    void set_corner_radius(float radius) {
+        corner_radius_ = radius;
         request_redraw();
     }
 
@@ -220,8 +228,9 @@ private:
     bool frame_wanted_{false};
     std::int32_t margin_{0};        // the frame's, for the next frame
     std::int32_t drawn_margin_{0};  // the frame's, as last drawn
-    // What update_surface_regions last told the compositor: width, height, margin, opaque.
-    std::array<std::int32_t, 4> regions_for_{-1, -1, -1, -1};
+    float corner_radius_;
+    // What update_surface_regions last told the compositor: width, height, margin, radius, opaque.
+    std::array<std::int32_t, 5> regions_for_{-1, -1, -1, -1, -1};
     bool decoration_answered_{false};  // the compositor said which, at least once
     WindowState state_;
     WindowState pending_state_;  // from configure, applied with its ack

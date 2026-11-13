@@ -4,6 +4,66 @@ Work log, newest first. Each entry: what was done, decisions, measurements, open
 
 ---
 
+## 2026-11-13 — A see-through background, by barrulus (0.6.1)
+
+**Tested by the author** (2026-11-13, PR #3 installed from its branch, Umbriel): 0.7 live,
+text, icons and thumbnails solid; Quick Look, Ctrl+K and the context menu readable; maximize
+and restore; an out-of-range value reported and opaque again. GNOME and Plasma not tried (the
+author's call: the last commit only renamed the key and fixed tests).
+
+**Merged** PR #3 from barrulus (`e04921f`, a merge commit; his four commits keep him as their
+author), after a rebase on the window frame and one round of review: the clang job's
+`-Wdouble-promotion` in five test `Approx`, the key moved to `[window] background_opacity`, the
+README paragraph moved into `config.example.toml`'s comment.
+
+**What it does**
+- `[window] background_opacity` (0-1, finite, 1 by default, live): the content's clear and the
+  panels' backgrounds take it; text, icons, thumbnails and overlays stay solid.
+- `Renderer::fill_background(rect, colour)`: a scissored `glClear` that replaces what is under the
+  panel, so panels over the clear do not add up their alpha; used by the header, the sidebar (and
+  its top beside the header), the tab bar and the compositor-side title bar.
+- The frame: while drawing outline and shadows, the box shader drops what falls inside the
+  rounded content (`u_frame_content`, `u_frame_radius`), so a translucent window does not show
+  its own shadow through it.
+- `Window::update_surface_regions()`: an empty opaque region below 1.
+
+**Measured** (`nordend-snapshot --bench 2000`, framed, 2560x1440): median 0.33 ms a frame on
+`main` and on the PR, at 1.0 and at 0.7: no measurable cost.
+
+**Open**
+- clang-tidy: three style warnings in the PR's tests (`renderer_runs_test.cpp:164-165`, a
+  computed array index; `window_frame_test.cpp:151`, parentheses).
+
+---
+
+## 2026-11-13 — Square corners on request (0.6.1)
+
+**Tested by the author** (2026-11-13, installed build, Umbriel): the key read live and an
+out-of-range value reported (`'window.corner_radius' must be between 0 and 24, got 30; using
+12`). The corners themselves cannot be seen there: Umbriel rounds the window by itself. GNOME in
+the VM was not reached (the VM hung); left to the users, with the pixel tests and the snapshot.
+
+**Decision** (with the author, after a Discord ask from a Noctalia user who keeps every corner
+square): `[window] corner_radius`, 0-24 logical pixels, 12 by default; 0 keeps the corners square
+with the same outline and shadow, as GTK does for a square window. Only the window's corners: the
+radii inside Nordend (tabs, palette, Quick Look) stay. Kept on a branch until barrulus's PR #3
+(opacity) is merged: both touch the window's regions, `main.cpp` and the config.
+
+**Done**
+- `Config::Window::corner_radius`, read with `read_int` (0-24); followed live through
+  `Window::set_corner_radius()` (a redraw).
+- `WindowFrame::draw(renderer, activated, radius)` (12 by default); `Renderer::frame_window`
+  already skipped the corner cut at 0. The opaque region leaves out the corners by the radius in
+  use, whole pixels: all of the window at 0. `regions_for_` holds the radius too, so a change is
+  sent to the compositor.
+- `nordend-snapshot --csd normal,framed,square`.
+- Tests: `window_frame_test.cpp` (radius 0: every corner pixel of the content stays opaque,
+  outline along the edge, shadow past the corner, the buffer's corner clear), `config_test.cpp`
+  (0, 1, 24 read; -1, 25, 12.5, a string, a bool reported and 12 kept; the window keys in "every
+  key is read").
+
+---
+
 ## 2026-11-13 — A lost bus is let go (0.6.1)
 
 **Tested by the author** (2026-11-13, VM `nordend-void`, GNOME 48): Nordend open with two tabs

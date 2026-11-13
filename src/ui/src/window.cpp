@@ -2,6 +2,7 @@
 
 #include <GLES3/gl3.h>
 #include <algorithm>
+#include <cmath>
 #include <format>
 #include <span>
 #include <stdexcept>
@@ -62,7 +63,9 @@ std::int32_t WindowFrame::margin(const WindowState& state, bool client_decoratio
     return kMargin;
 }
 
-void WindowFrame::draw(Renderer& renderer, bool activated) {
+static_assert(WindowOptions{}.corner_radius == WindowFrame::kRadius);
+
+void WindowFrame::draw(Renderer& renderer, bool activated, float radius) {
     // Close to GTK's: a near shadow and a wide soft one, lighter for a window in the back.
     static constexpr Color kBlack = Color::rgb(0x000000);
     static constexpr std::array<WindowShadow, 2> kActive{{
@@ -73,7 +76,8 @@ void WindowFrame::draw(Renderer& renderer, bool activated) {
         {.blur = 1.5F, .offset_y = 1.0F, .color = kBlack.with_alpha(0.16F)},
         {.blur = 5.0F, .offset_y = 2.0F, .color = kBlack.with_alpha(0.18F)},
     }};
-    renderer.frame_window(kRadius, activated ? kActive : kInactive, kBlack.with_alpha(0.18F));
+    renderer.frame_window(std::max(radius, 0.0F), activated ? kActive : kInactive,
+                          kBlack.with_alpha(0.18F));
 }
 
 Window::Window(Display& display, EglContext& egl, FontSystem& fonts, const WindowOptions& options)
@@ -82,6 +86,7 @@ Window::Window(Display& display, EglContext& egl, FontSystem& fonts, const Windo
       width_{options.width},
       height_{options.height},
       frame_wanted_{options.frame},
+      corner_radius_{options.corner_radius},
       title_{options.title},
       background_{options.background},
       background_opacity_{options.background_opacity} {
@@ -208,7 +213,7 @@ void Window::draw() {
                       Rect{0.0F, 0.0F, static_cast<float>(width_), static_cast<float>(height_)});
     }
     if (margin_ > 0) {
-        WindowFrame::draw(*renderer_, state_.activated);
+        WindowFrame::draw(*renderer_, state_.activated, corner_radius_);
     }
     renderer_->end_frame();
     if (eglSwapBuffers(egl_.display(), egl_surface_) != EGL_TRUE) {
@@ -272,7 +277,9 @@ void Window::update_buffer_size() {
 
 void Window::update_surface_regions() {
     const bool is_opaque = background_opacity_ >= 1.0F;
-    const std::array<std::int32_t, 4> wanted{width_, height_, margin_, is_opaque ? 1 : 0};
+    // The opaque region leaves out the rounded corners, whole logical pixels.
+    const auto radius = static_cast<std::int32_t>(std::ceil(std::max(corner_radius_, 0.0F)));
+    const std::array<std::int32_t, 5> wanted{width_, height_, margin_, radius, is_opaque ? 1 : 0};
     if (wanted == regions_for_) {
         return;
     }
@@ -299,7 +306,7 @@ void Window::update_surface_regions() {
     }
 
     // Opaque: the window but its rounded corners, so the compositor need not blend it.
-    const auto r = m > 0 ? static_cast<std::int32_t>(WindowFrame::kRadius) : 0;
+    const std::int32_t r = m > 0 ? radius : 0;
     wl_region* opaque = wl_compositor_create_region(display_.compositor());
     wl_region_add(opaque, m, m + r, width_, std::max(0, height_ - (2 * r)));
     if (r > 0) {

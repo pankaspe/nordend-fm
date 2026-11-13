@@ -102,6 +102,37 @@ TEST_CASE("window frame: the content inside the margin, rounded, a shadow behind
     CHECK(pixels.at(0, 0)[3] == 0);
 }
 
+TEST_CASE("window frame: square corners keep the content, the outline and the shadow") {
+    const std::unique_ptr<ui::Offscreen> gl = offscreen();
+    if (!gl) {
+        return;
+    }
+    ui::FontSystem fonts;
+    ui::Renderer renderer{fonts};
+    renderer.begin_frame(kWidth, kHeight, 1.0F, ui::Color::rgb(0xFF0000), kMargin);
+    WindowFrame::draw(renderer, true, 0.0F);
+    renderer.end_frame();
+    Pixels pixels;
+    glReadPixels(0, 0, kWidth, kHeight, GL_RGBA, GL_UNSIGNED_BYTE, pixels.rgba.data());
+
+    const auto m = static_cast<std::int32_t>(kMargin);
+    // Every corner pixel of the content stays, opaque.
+    for (const auto& [x, y] :
+         std::array<std::array<std::int32_t, 2>, 4>{{{m, m},
+                                                     {kWidth - m - 1, m},
+                                                     {m, kHeight - m - 1},
+                                                     {kWidth - m - 1, kHeight - m - 1}}}) {
+        CAPTURE(x);
+        CAPTURE(y);
+        CHECK(pixels.at(x, y) == std::array<std::uint8_t, 4>{255, 0, 0, 255});
+    }
+    // Outside: the outline along the edge and the shadow past the corner.
+    CHECK(pixels.at(m - 1, kHeight / 2)[3] > 30);
+    CHECK(pixels.at(m - 1, m - 1)[3] > 0);
+    CHECK(pixels.at(kWidth - m, kHeight - m)[3] > 0);
+    CHECK(pixels.at(0, 0)[3] == 0);
+}
+
 TEST_CASE("window frame: none without a margin") {
     const std::unique_ptr<ui::Offscreen> gl = offscreen();
     if (!gl) {

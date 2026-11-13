@@ -198,8 +198,12 @@ void read_document(const toml::table& root, Reader& reader, Config& config) {
                                                     path));
                       }
                   }},
-                 {"background_opacity", [&](const toml::node& value, const std::string& path) {
+                 {"background_opacity",
+                  [&](const toml::node& value, const std::string& path) {
                       reader.read_opacity(value, path, config.window.background_opacity);
+                  }},
+                 {"corner_radius", [&](const toml::node& value, const std::string& path) {
+                      reader.read_int(value, path, 0, 24, config.window.corner_radius);
                   }}});
         } else if (key.str() == "icon") {
             reader.read_section(

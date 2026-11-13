@@ -26,6 +26,7 @@ void check_defaults(const Config& config) {
     const Config defaults;
     CHECK(config.window.background_opacity == defaults.window.background_opacity);
     CHECK(config.font.family == defaults.font.family);
+    CHECK(config.window.corner_radius == defaults.window.corner_radius);
     CHECK(config.font.monospace == defaults.font.monospace);
     CHECK(config.pointer.double_click_ms == defaults.pointer.double_click_ms);
     CHECK(config.pointer.double_click_distance == defaults.pointer.double_click_distance);
@@ -87,6 +88,10 @@ monospace = "JetBrains Mono"
 double_click_ms = 250
 double_click_distance = 0
 
+[window]
+title_bar = "compositor"
+corner_radius = 0
+
 [icon]
 follow_accent = false
 )");
@@ -95,6 +100,8 @@ follow_accent = false
     CHECK(result.config.font.monospace == "JetBrains Mono");
     CHECK(result.config.pointer.double_click_ms == 250);
     CHECK(result.config.pointer.double_click_distance == 0);
+    CHECK(result.config.window.title_bar == Config::Window::TitleBar::compositor);
+    CHECK(result.config.window.corner_radius == 0);
     CHECK_FALSE(result.config.icon.follow_accent);
 }
 
@@ -249,5 +256,21 @@ TEST_CASE("background opacity accepts finite numbers from zero to one") {
         CHECK(contains(result.problems[0],
                        "'window.background_opacity' must be a number between 0 and 1"));
         CHECK(result.config.window.background_opacity == 1.0F);
+    }
+}
+
+TEST_CASE("window corner radius: 0 to 24, else the default") {
+    CHECK(parse("").config.window.corner_radius == 12);
+    for (const int value : {0, 1, 24}) {
+        const auto result = parse("[window]\ncorner_radius = " + std::to_string(value));
+        CAPTURE(value);
+        CHECK(result.problems.empty());
+        CHECK(result.config.window.corner_radius == value);
+    }
+    for (const std::string value : {"-1", "25", "12.5", "\"0\"", "true"}) {
+        const auto result = parse("[window]\ncorner_radius = " + value);
+        CAPTURE(value);
+        CHECK(result.problems.size() == 1);
+        CHECK(result.config.window.corner_radius == 12);
     }
 }

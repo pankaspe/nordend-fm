@@ -35,6 +35,9 @@ struct Config {
         };
         TitleBar title_bar{TitleBar::integrated};  // read at start
         float background_opacity{1.0F};  // background only; foreground content stays solid
+        // The window's corners, in logical pixels (0-24; 0 = square), where Nordend draws its
+        // own frame; followed live.
+        int corner_radius{12};
     };
 
     Font font;
