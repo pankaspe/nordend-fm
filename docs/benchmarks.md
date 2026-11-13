@@ -17,6 +17,34 @@ again. Newest results first in each section; the [devlog](devlog.md) tells the s
 
 ## DESIGN targets (ROADMAP 7.6)
 
+### 2026-11-13: checked again for the README (0.6.2)
+
+| Target | Measured | Verdict |
+|--------|----------|---------|
+| Start to the first frame (warm) | **76.0 ms** median of 10 (68.3-84.0), on screen, Umbriel; cold not measured again | met |
+| 10k-file folder | first entries **0.77 ms**, whole folder **19.1 ms** (`nordend-bench-dir --runs 20 build/bench-10k`, median of runs 2-20) | met |
+| Quick Look of an ORF | **131.2 ms** on screen for `_4230010.ORF` (1440x1920 shown), helpers already running; its thumbnail 18.3 ms | **not met** |
+| Scrolling | not measured again | — |
+
+Memory at start: Anonymous **23.5 MB** in the author's `~/nordend-rss.log` (0.6.2, 18:31), as
+before (23.5-24 MB). Binary: nordend 4.11 MB, 3.42 MB stripped; `nordend-preview` 1.15 / 1.03 MB.
+
+Start-up, `nordend-bench-start -n 10` after 3 warm-up runs (method below), against 2026-11-01's
+warm medians: main 3.6 (4.8), egl 36.5 (32.3), fonts 43.3 (37.1), portal 45.1 (38.3), window
+52.8 (44.7), first-draw 58.5 (49.2), first-frame-shown 76.0 (64.5). Most of the 11.5 ms is EGL
+and the driver (+4.2 ms: Mesa's, not ours), then fontconfig (+2 ms), the window (+1.3 ms: the
+header and the frame), the first draw (+1.2 ms) and the wait for the compositor (+2.2 ms).
+
+Quick Look, `NORDEND_LOG=debug build/nordend DIR` on screen (the author's), Space on one ORF a
+few seconds after start: `_4230010.ORF` 131.2 ms; `_4230017.ORF` 93.1 ms but shown at 1200x900
+(the window at another size), so not comparable. Offscreen (`nordend-snapshot --columns DIR
+--reveal FILE --keys space ... 2560 1440 1`, a fresh process each run, so the helper starts
+cold), the same five files as 2026-11-01, three runs each: 141.5-162.2 ms (2026-11-08 on
+`_7230017.ORF`, the same way: 120.6-136.4 ms). The target was met in process (82-96 ms,
+2026-11-01) and has not been measured on screen since pictures moved into the caged helper
+(2026-11-08): *to be looked into* (the helper's transfer, the scaling, the two neighbours
+decoded at the same time).
+
 ### 2026-11-01
 
 Every target of the DESIGN, measured again with today's code. On screen: Umbriel, ASUS ProArt

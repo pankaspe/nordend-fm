@@ -39,9 +39,10 @@ animations come from its own renderer. It follows your theme by itself, as GTK a
 colours in your GTK settings (what Noctalia, Stylix or matugen write there), else the desktop's
 light or dark style and accent, live ([Colours](#colours)).
 
-- **Fast.** The first frame in about 65 ms, a 10 000-file folder in 0.7 ms, a raw photo in
-  Quick Look in under 100 ms. Every figure is measured, with the tool to measure it again.
-- **Light.** A 3 MB binary, 17 libraries, about 25 MB of memory, and no CPU at all while
+- **Fast.** The first frame in about 75 ms, the first entries of a 10 000-file folder in under
+  1 ms, a raw photo in Quick Look at once as its thumbnail and sharp in about 130 ms. Every
+  figure is measured, with the tool to measure it again.
+- **Light.** A 3.4 MB binary, 17 libraries, about 24 MB of memory, and no CPU at all while
   nothing moves.
 - **Safe with what it reads.** Files that come from outside are read by `nordend-preview`, a
   small helper process in a cage of Nordend's own (seccomp and landlock: no files, no network,
@@ -105,19 +106,20 @@ every shortcut.
 | Binary | **4.11 MB** (3.42 MB stripped), x86-64; the decoders and text readers in `nordend-preview`, 1.15 MB (1.03 stripped), a separate caged helper |
 | Libraries | 17 direct (the helper: 8); no GTK, no Qt, no GLib |
 | Code | about 52 900 lines of C++20, 18 900 of tests (453 test cases, under ASan and TSan too) |
-| Memory | **25 MB** of its own at start; pictures are decoded in the helpers, which give their memory back after a quiet second |
+| Memory | **24 MB** of its own at start; pictures are decoded in the helpers, which give their memory back after a quiet second |
 | Idle | **0 CPU**: nothing is drawn while nothing moves |
 
 ## Benchmarks
 
-The design's four targets, measured on 2026-11-01 (Ryzen 7 5700G, RX 6650 XT, SATA SSD):
+The design's four targets (Ryzen 7 5700G, RX 6650 XT, SATA SSD), measured again on 2026-11-13
+where the date says so:
 
 | Target | Measured |
 |--------|---------:|
-| Cold start to the first frame on screen: < 150 ms | **128 ms** (warm: **64 ms**) |
-| A 10 000-file folder: first frame < 50 ms | first entries in **0.7 ms**, all in **17 ms** |
-| Quick Look of an ORF raw photo: < 100 ms | **82-96 ms** |
-| Scrolling with no dropped frame | worst frame **3.7 ms** of 13.3 (75 Hz) |
+| Cold start to the first frame on screen: < 150 ms | **128 ms** (2026-11-01); warm **76 ms** (2026-11-13) |
+| A 10 000-file folder: first frame < 50 ms | first entries in **0.8 ms**, all in **19 ms** (2026-11-13) |
+| Quick Look of an ORF raw photo: < 100 ms | **131 ms** (2026-11-13): **not met** since pictures are made in the caged helper (0.4.0; 82-96 ms before); the thumbnail shows in 20 ms. Being looked into |
+| Scrolling with no dropped frame | worst frame **3.7 ms** of 13.3 (75 Hz) (2026-11-01) |
 
 Every measurement and its method is in [docs/benchmarks.md](docs/benchmarks.md).
 
