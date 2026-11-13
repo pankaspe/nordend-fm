@@ -221,6 +221,42 @@ TEST_CASE("exec: the terminal: $TERMINAL, then xdg-terminal-exec, then the known
           std::vector<std::string>{exec.string(), "hx", "/d/a.txt"});
 }
 
+TEST_CASE("exec: config.toml's terminal comes first, in its own form, else the usual order") {
+    using Line = std::vector<std::string>;
+    System sys;
+    const Line argv{"hx", "/d/a.txt"};
+    const fs::path foot = sys.program("foot");
+    const fs::path mine = sys.program("myterm");
+    const fs::path exec = sys.program("xdg-terminal-exec");
+    sys.environment.terminal = "foot";
+
+    sys.environment.configured_terminal = {"myterm", "--big"};
+    CHECK(platform::in_terminal(argv, sys.environment).value_or(Line{}) ==
+          Line{mine.string(), "--big", "-e", "hx", "/d/a.txt"});
+    CHECK(platform::terminal_alone(sys.environment).value_or(Line{}) ==
+          Line{mine.string(), "--big"});
+    // By its path too.
+    sys.environment.configured_terminal = {mine.string()};
+    CHECK(platform::in_terminal(argv, sys.environment).value_or(Line{}) ==
+          Line{mine.string(), "-e", "hx", "/d/a.txt"});
+    // A known one keeps its form, its options before it.
+    sys.environment.terminal.clear();
+    sys.environment.configured_terminal = {"foot", "--app-id=work"};
+    CHECK(platform::in_terminal(argv, sys.environment).value_or(Line{}) ==
+          Line{foot.string(), "--app-id=work", "--", "hx", "/d/a.txt"});
+    // xdg-terminal-exec takes the command as it is.
+    sys.environment.configured_terminal = {"xdg-terminal-exec", "--dir=/d"};
+    CHECK(platform::in_terminal(argv, sys.environment).value_or(Line{}) ==
+          Line{exec.string(), "--dir=/d", "hx", "/d/a.txt"});
+    // Not installed: $TERMINAL, then the rest, as without it.
+    sys.environment.configured_terminal = {"missing"};
+    sys.environment.terminal = "myterm";
+    CHECK(platform::in_terminal(argv, sys.environment).value_or(Line{}) ==
+          Line{mine.string(), "-e", "hx", "/d/a.txt"});
+    sys.environment.terminal.clear();
+    CHECK(platform::terminal_alone(sys.environment).value_or(Line{}) == Line{exec.string()});
+}
+
 TEST_CASE("exec: a terminal alone: the same one, with its options and nothing to run") {
     using Line = std::vector<std::string>;
     System sys;
@@ -465,7 +501,8 @@ TEST_CASE("opener: a terminal in a folder, and a folder with a chosen applicatio
         [&](const std::string& message, bool error) { reports.emplace_back(message, error); }};
     opener.open_terminal(sys.dir.path / "photos");
     REQUIRE(run_until(loop, [&] { return !reports.empty(); }));
-    CHECK(reports[0] == std::pair<std::string, bool>{"No terminal found: set $TERMINAL", true});
+    CHECK(reports[0] == std::pair<std::string, bool>{
+                            "No terminal found: set terminal.program in config.toml", true});
 
     // The terminal starts in the folder: the fake one writes where it is.
     sys.program("foot", "pwd > " + log.string() + "\n");
@@ -476,6 +513,19 @@ TEST_CASE("opener: a terminal in a folder, and a folder with a chosen applicatio
     }));
     CHECK(reports[0] == std::pair<std::string, bool>{"Opening sub with foot…", false});
     CHECK(read_file(log) == (sys.dir.path / "photos" / "sub").string() + "\n");
+
+    // config.toml names another terminal: used from the next open on.
+    const fs::path mine_log = sys.dir.path / "mine";
+    sys.program("myterm", R"(echo "$@" > )" + mine_log.string() + "\n");
+    opener.set_terminal({"myterm", "--big"});
+    reports.clear();
+    opener.open_terminal(sys.dir.path / "photos");
+    REQUIRE(run_until(loop, [&] {
+        return reports.size() == 1 && opener.launcher().running() == 0 && !opener.planning();
+    }));
+    CHECK(reports[0] == std::pair<std::string, bool>{"Opening photos with myterm…", false});
+    CHECK(read_file(mine_log) == "--big\n");
+    opener.set_terminal({});
 
     // Open With on a folder: the application gets it (without one, folders are left out).
     reports.clear();

@@ -340,8 +340,12 @@ public:
     // move.
     void take_selection(bool cut);
 
-    // Ctrl+C on Quick Look's text page: text on the clipboard (no files any more).
-    void copy_text(std::string text);
+    // Ctrl+C on Quick Look's text page: text on the clipboard (no files any more). message:
+    // what the status bar says; empty: how many characters or lines.
+    void copy_text(std::string text, std::string message = {});
+
+    // Ctrl+Shift+C: the path of the folder shown, as text on the clipboard.
+    void copy_path();
 
     // Ctrl+V: copies or moves what was taken into the folder shown; when another program holds
     // the clipboard, the files it offers (x-special/gnome-copied-files, else text/uri-list).

@@ -78,8 +78,10 @@ OpenPlan plan_open(std::span<const OpenFile> files, const Applications& apps,
             if (app.terminal) {
                 std::optional<std::vector<std::string>> wrapped = in_terminal(line, environment);
                 if (!wrapped) {
-                    add_problem(plan.problems,
-                                std::format("No terminal to run {} in: set $TERMINAL", name));
+                    add_problem(
+                        plan.problems,
+                        std::format("No terminal to run {} in: set terminal.program in config.toml",
+                                    name));
                     break;
                 }
                 line = std::move(*wrapped);
@@ -189,6 +191,13 @@ void Opener::choices(const std::filesystem::path& directory, fs::Entry entry,
         });
 }
 
+void Opener::set_terminal(std::vector<std::string> configured) {
+    // A new copy: the workers planning now keep the one they took.
+    auto fresh = std::make_shared<Environment>(*environment_);
+    fresh->configured_terminal = std::move(configured);
+    environment_ = std::move(fresh);
+}
+
 void Opener::open_terminal(const std::filesystem::path& directory) {
     ++planning_;
     pool_.submit(
@@ -197,7 +206,8 @@ void Opener::open_terminal(const std::filesystem::path& directory) {
             OpenPlan plan;
             std::optional<std::vector<std::string>> line = terminal_alone(*environment);
             if (!line) {
-                plan.problems.emplace_back("No terminal found: set $TERMINAL");
+                plan.problems.emplace_back(
+                    "No terminal found: set terminal.program in config.toml");
                 return plan;
             }
             const std::string name = std::filesystem::path{line->front()}.filename().string();

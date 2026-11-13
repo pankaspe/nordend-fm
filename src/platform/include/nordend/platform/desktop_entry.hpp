@@ -25,8 +25,12 @@ struct Environment {
     std::string locale;
     // $PATH (or "/usr/local/bin:/usr/bin:/bin"): where programs are looked up.
     std::string path;
-    // $TERMINAL: the user's terminal, tried first for Terminal=true applications.
+    // $TERMINAL: the user's terminal, tried for Terminal=true applications and "Open in
+    // Terminal" after configured_terminal.
     std::string terminal;
+    // config.toml's [terminal]: the program, then its own options; empty when not set. Not read
+    // by from_environment().
+    std::vector<std::string> configured_terminal;
 
     [[nodiscard]] static Environment from_environment();
 };

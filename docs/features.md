@@ -164,8 +164,10 @@ README's [What's next](../README.md#whats-next).
   - the status bar says what happened ("Opening 5 files with Darktable…"), in red when there is
     no app for a type or the app fails at once.
 - **Open in a terminal.** F4 opens a terminal in the folder under the cursor, else in the folder
-  shown (also from the context menu, "Open in Terminal"); the same terminal as for terminal apps
-  (`$TERMINAL`, `xdg-terminal-exec`, foot...).
+  shown (also from the context menu, "Open in Terminal"); the same terminal as for terminal apps:
+  `[terminal] program` (and `args`) in `config.toml` when set, read live, then `$TERMINAL`,
+  `xdg-terminal-exec`, foot... A known terminal runs a command its own way, any other with `-e`;
+  a configured program that is not installed is reported in the log and the order goes on.
 - **Rename in place** (F2): the name becomes a field where it is, in all three views, with the
   name selected but not its extension. Typing works with accents and compose. Enter keeps the
   name, Escape gives up, and a click elsewhere keeps it. The usual editing keys work, including
@@ -228,6 +230,9 @@ README's [What's next](../README.md#whats-next).
     never freezes Nordend (it is given up after 3 s);
   - when another program copies something, the files Nordend cut stop fading: Ctrl+V pastes what
     is on the clipboard now. A cut pasted once empties the clipboard.
+  - Ctrl+Shift+C (or "Copy Path" on a folder's empty space, or the command palette) copies the
+    path of the folder shown as text, whatever is selected, and the status bar says which; the
+    entries' own paths come with Ctrl+C. Text on the clipboard replaces the files Nordend took.
 - **The Trash** in the sidebar (its icon full or empty):
   - every trash as one folder: the home's and each disk's (`.Trash-1000` on a data disk), by
     original name; the same name trashed twice shows as "a.txt" and "a.2.txt";
@@ -245,7 +250,8 @@ README's [What's next](../README.md#whats-next).
   or on the info pane, the Menu key or Shift+F10:
   - on files and folders: Open, Open With, Copy, Cut, Paste, Rename (one entry), Move to Trash,
     Delete Permanently; on a folder also Open in Terminal and Add to Sidebar;
-    on a folder's empty space: New Folder, New File, Paste, Add to Sidebar, Open in Terminal; what cannot be done now is dimmed,
+    on a folder's empty space: New Folder, New File, Paste, Add to Sidebar, Open in Terminal,
+    Copy Path; what cannot be done now is dimmed,
     and each item shows its shortcut;
   - a right click on an entry selects it first, unless it is part of the selection already;
   - Open With lists the applications for the file's type exactly as GTK apps do (0 differences
@@ -450,8 +456,9 @@ viewporter, cursor-shape and xdg-activation.
 
 ## Next
 
-0.6.1 is out (rounded corners and a shadow around Nordend's header, square on request; a
-see-through background by barrulus; a clean exit at logout), after 0.6.0 (the colours of your GTK
+0.6.2 is out (Ctrl+Shift+C copies the folder's path; the terminal chosen in `config.toml`; both
+from Evergaster's issue #9), after 0.6.1 (rounded corners and a shadow around Nordend's header,
+square on request; a see-through background by barrulus; a clean exit at logout), 0.6.0 (the colours of your GTK
 theme, read live with nothing to set up; one header for the whole window), 0.5.1 (grid thumbnails up to 512 px, hardened builds, a Nix flake,
 sorting by type for names with several types), 0.5.0 (text previews with syntax colours, selecting and
 copying, logs from their end; the helper became the first engine), 0.4.0 (image previews read by Nordend's own code in caged

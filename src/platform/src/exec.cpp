@@ -3,6 +3,7 @@
 #include <array>
 #include <utility>
 
+#include "nordend/core/log.hpp"
 #include "nordend/thumbs/cache.hpp"
 
 namespace nordend::platform {
@@ -215,6 +216,19 @@ struct FoundTerminal {
 };
 
 std::optional<FoundTerminal> find_terminal(const Environment& environment) {
+    if (!environment.configured_terminal.empty()) {
+        const std::string& name = environment.configured_terminal.front();
+        if (const std::optional<std::filesystem::path> program =
+                find_program(name, environment.path)) {
+            const bool is_exec = name.substr(name.rfind('/') + 1) == "xdg-terminal-exec";
+            return FoundTerminal{.program = program->string(),
+                                 .options = {environment.configured_terminal.begin() + 1,
+                                             environment.configured_terminal.end()},
+                                 .known = is_exec ? nullptr : known_terminal(name),
+                                 .is_exec = is_exec};
+        }
+        log::warn("terminal.program \"{}\" was not found; trying $TERMINAL and the others", name);
+    }
     if (!environment.terminal.empty()) {
         if (const std::optional<std::vector<std::string>> words =
                 split_exec(environment.terminal)) {
@@ -252,6 +266,7 @@ std::optional<std::vector<std::string>> in_terminal(const std::vector<std::strin
     }
     if (found->is_exec) {
         std::vector<std::string> line{std::move(found->program)};
+        line.insert(line.end(), found->options.begin(), found->options.end());
         line.insert(line.end(), argv.begin(), argv.end());
         return line;
     }

@@ -337,6 +337,7 @@ TEST_CASE("palette in the browser: every command is offered where it can be used
         {Command::rename, "rename"},
         {Command::new_folder, "new_folder"},
         {Command::copy, "copy"},
+        {Command::copy_path, "copy_path"},
         {Command::cut, "cut"},
         {Command::paste, "paste"},
         {Command::trash, "trash"},

@@ -112,6 +112,29 @@ public:
         out = value->get();
     }
 
+    // A list of strings; anything else keeps out.
+    void read_strings(const toml::node& node, const std::string& path,
+                      std::vector<std::string>& out) {
+        const toml::array* array = node.as_array();
+        if (array == nullptr) {
+            report(node.source(), std::format("'{}' must be a list of strings, got {}; ignored",
+                                              path, type_name(node)));
+            return;
+        }
+        std::vector<std::string> strings;
+        for (const toml::node& item : *array) {
+            const auto* value = item.as_string();
+            if (value == nullptr) {
+                report(item.source(),
+                       std::format("'{}' must be a list of strings, got {} in it; ignored", path,
+                                   type_name(item)));
+                return;
+            }
+            strings.push_back(value->get());
+        }
+        out = std::move(strings);
+    }
+
     void read_bool(const toml::node& node, const std::string& path, bool& out) {
         const auto* value = node.as_boolean();
         if (value == nullptr) {
@@ -205,6 +228,15 @@ void read_document(const toml::table& root, Reader& reader, Config& config) {
                  {"corner_radius", [&](const toml::node& value, const std::string& path) {
                       reader.read_int(value, path, 0, 24, config.window.corner_radius);
                   }}});
+        } else if (key.str() == "terminal") {
+            reader.read_section(node, "terminal",
+                                {{"program",
+                                  [&](const toml::node& value, const std::string& path) {
+                                      reader.read_string(value, path, config.terminal.program);
+                                  }},
+                                 {"args", [&](const toml::node& value, const std::string& path) {
+                                      reader.read_strings(value, path, config.terminal.args);
+                                  }}});
         } else if (key.str() == "icon") {
             reader.read_section(
                 node, "icon",

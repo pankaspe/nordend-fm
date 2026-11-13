@@ -448,9 +448,21 @@ int main(int argc, char** argv) {
         // The column view and the grid (ROADMAP 4.2, 4.4), unless the renderer test scene was
         // asked for.
         std::unique_ptr<views::Browser> columns;
-        // config.toml is followed while Nordend runs: the double click and the corners change at
-        // once, the fonts at the next start (`config` keeps the ones in use).
+        // Files open with their default applications (ROADMAP 6.1); before the config's watcher,
+        // which changes its terminal.
+        std::unique_ptr<platform::Opener> opener;
+        // config.toml is followed while Nordend runs: the double click, the corners and the
+        // terminal change at once, the fonts at the next start (`config` keeps the ones in use).
         std::unique_ptr<core::FileWatcher> config_watcher;
+        // [terminal] as Environment::configured_terminal wants it: the program, then its options.
+        const auto configured_terminal = [](const core::Config& from) {
+            std::vector<std::string> line;
+            if (!from.terminal.program.empty()) {
+                line.push_back(from.terminal.program);
+                line.insert(line.end(), from.terminal.args.begin(), from.terminal.args.end());
+            }
+            return line;
+        };
         const auto apply_config = [&](const core::Config& fresh) {
             window.set_background_opacity(fresh.window.background_opacity);
             window.set_corner_radius(static_cast<float>(fresh.window.corner_radius));
@@ -458,6 +470,9 @@ int main(int argc, char** argv) {
                                  static_cast<float>(fresh.pointer.double_click_distance));
             follow_accent = fresh.icon.follow_accent;
             update_icon();
+            if (opener) {
+                opener->set_terminal(configured_terminal(fresh));
+            }
         };
         // Writes state.toml as things change; the window's size is the one it has when neither
         // maximized, fullscreen nor tiled, so a maximized window comes back to it.
@@ -477,8 +492,6 @@ int main(int argc, char** argv) {
             state.maximized = shown.maximized;
             keeper.note(state);
         };
-        // Files open with their default applications (ROADMAP 6.1).
-        std::unique_ptr<platform::Opener> opener;
         if (!test_scene) {
             const std::shared_ptr<const fs::MimeDatabase> mime = fs::MimeDatabase::load();
             columns = std::make_unique<views::Browser>(
@@ -486,8 +499,10 @@ int main(int argc, char** argv) {
                 [&](ui::CursorShape shape) { seat.set_cursor(shape); },
                 std::make_shared<thumbs::Cache>(thumbs::default_root(),
                                                 "nordend-" NORDEND_VERSION));
+            platform::Environment environment = platform::Environment::from_environment();
+            environment.configured_terminal = configured_terminal(config);
             opener = std::make_unique<platform::Opener>(
-                loop, pool, mime, platform::Environment::from_environment(),
+                loop, pool, mime, std::move(environment),
                 [&](std::string message, bool error) {
                     columns->show_message(std::move(message), error);
                 },

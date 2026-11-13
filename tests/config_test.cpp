@@ -5,6 +5,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include <doctest/doctest.h>
 
@@ -31,6 +32,8 @@ void check_defaults(const Config& config) {
     CHECK(config.pointer.double_click_ms == defaults.pointer.double_click_ms);
     CHECK(config.pointer.double_click_distance == defaults.pointer.double_click_distance);
     CHECK(config.icon.follow_accent == defaults.icon.follow_accent);
+    CHECK(config.terminal.program.empty());
+    CHECK(config.terminal.args.empty());
 }
 
 bool contains(const std::string& text, std::string_view part) {
@@ -94,6 +97,10 @@ corner_radius = 0
 
 [icon]
 follow_accent = false
+
+[terminal]
+program = "ghostty"
+args = ["--gtk-single-instance=false"]
 )");
     CHECK(result.problems.empty());
     CHECK(result.config.font.family == "Inter:weight=medium");
@@ -103,6 +110,8 @@ follow_accent = false
     CHECK(result.config.window.title_bar == Config::Window::TitleBar::compositor);
     CHECK(result.config.window.corner_radius == 0);
     CHECK_FALSE(result.config.icon.follow_accent);
+    CHECK(result.config.terminal.program == "ghostty");
+    CHECK(result.config.terminal.args == std::vector<std::string>{"--gtk-single-instance=false"});
 }
 
 TEST_CASE("dotted keys work like sections") {
@@ -272,5 +281,24 @@ TEST_CASE("window corner radius: 0 to 24, else the default") {
         CAPTURE(value);
         CHECK(result.problems.size() == 1);
         CHECK(result.config.window.corner_radius == 12);
+    }
+}
+
+TEST_CASE("terminal: a program and a list of strings, else nothing changes") {
+    const auto alone = parse("[terminal]\nprogram = \"foot\"\n");
+    CHECK(alone.problems.empty());
+    CHECK(alone.config.terminal.program == "foot");
+    CHECK(alone.config.terminal.args.empty());
+    CHECK(parse("[terminal]\nargs = []\n").problems.empty());
+
+    for (const std::string text : {"program = 3", "program = \"\"", "args = \"--big\"",
+                                   "args = [\"--big\", 1]", "args = [[\"--big\"]]"}) {
+        const auto result = parse("[terminal]\n" + text + "\n");
+        CAPTURE(text);
+        REQUIRE(result.problems.size() == 1);
+        CHECK(contains(result.problems[0],
+                       text.starts_with("program") ? "'terminal.program'" : "'terminal.args'"));
+        CHECK(result.config.terminal.program.empty());
+        CHECK(result.config.terminal.args.empty());
     }
 }

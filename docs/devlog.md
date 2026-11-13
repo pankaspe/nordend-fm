@@ -4,6 +4,73 @@ Work log, newest first. Each entry: what was done, decisions, measurements, open
 
 ---
 
+## 2026-11-13 — Nordend 0.6.2
+
+A patch release with issue #9 (Evergaster): Ctrl+Shift+C copies the shown folder's path, and
+`[terminal]` in `config.toml` picks the terminal. CMake version, README (badges, note, install
+note, Versions, What's next, Features, At a glance) and features say so. At a glance: nordend
+4.11 MB / 3.42 stripped, the helper 1.15 / 1.03, `readelf -d` NEEDED 17 and 8, 52 900 + 18 900
+lines, 453 tests (doctest: 452 passed + 1 skipped); memory not re-measured (nothing new at
+start). Engine protocol still 4; no parser changed, so no fuzz run. CI: `dbus` in the Void
+jobs, for `bus loop`.
+
+---
+
+## 2026-11-13 — The terminal in config.toml (0.6.2, issue #9, part 2)
+
+**Tested by the author** (2026-11-13, `~/.local`, Umbriel; foot is his only terminal and
+`$TERMINAL` is unset): `program = "foot"` with `args = ["--font=monospace:size=20"]`, then
+`size=8`, then the section removed: F4 followed each change live. A missing program (`kitty`,
+`nonesiste`) logged the warning and opened foot from the known list; `program = 3` reported by
+`--check-config`.
+
+**Done**
+- `[terminal] program` and `args` (a list of strings) in `config.toml`, read live: tried before
+  `$TERMINAL` for Open in Terminal (F4, the menus) and Terminal=true applications.
+  `Config::Terminal`, `Reader::read_strings`, `Environment::configured_terminal` (program then
+  options; `from_environment()` leaves it empty), `Opener::set_terminal` (a new copy of the
+  environment: workers planning keep theirs). In `main.cpp` the opener is declared before the
+  config's watcher, which changes it.
+- `find_terminal`: the configured program first, by name or path; a known terminal keeps its
+  form with the options before it (`foot --app-id=work -- hx`), `xdg-terminal-exec` takes the
+  command as it is (its options too now), any other gets `-e`; not found → `log::warn` and the
+  usual order.
+- "No terminal found" now says `set terminal.program in config.toml` instead of `$TERMINAL`.
+- Tests: config (every key, wrong types, empty program, a list with a non-string), exec (order,
+  path, known form, xdg-terminal-exec, missing), the opener switching terminal live.
+  `config.example.toml` has the section commented out (no default).
+
+---
+
+## 2026-11-13 — Copy the folder's path (0.6.2, issue #9, part 1)
+
+**Tested by the author** (2026-11-13, installed in `~/.local`, Umbriel): the key with a
+selection, the columns' active column, the empty-space menu, the palette, F1, and Ctrl+V
+after Ctrl+Shift+C ("The clipboard holds no files"): all as expected.
+
+**Done**
+- Ctrl+Shift+C (`Command::copy_path`, in the Files group of the shortcuts): the path of the folder
+  shown (the one with the keyboard; in the columns, the active column) as text on the clipboard
+  (`UTF8_STRING`, `text/plain;charset=utf-8`, `text/plain`), "Copied /home/…" in the status bar.
+  Also "Copy Path" in the empty-space menu (after Open in Terminal) and in the command palette;
+  it works in Quick Look and in the trash too.
+- `Browser::copy_text(text, message)`: the status bar's message can be given; empty keeps
+  "Copied N characters/lines".
+- Tests: `clipboard: Ctrl+Shift+C copies the shown folder's path…` (selection kept, no file
+  formats offered, an empty folder, the Caps Lock keysym); the palette and empty-space menu
+  lists gain `copy_path`.
+
+**Decisions**
+- Always the folder, never the selection (the author, 2026-11-13). The issue asked for the
+  selection's paths when there is one, else the folder; but in Nordend the cursor's entry is
+  the selection (arrows select), so "nothing selected" happens only in an empty folder and the
+  key would almost never copy the folder. The entries' paths already come as text with Ctrl+C.
+  Said on #9.
+- CI: the Void jobs install `dbus`, so `bus loop` (a private dbus-daemon) runs there instead of
+  being skipped.
+
+---
+
 ## 2026-11-13 — Nordend 0.6.1
 
 A patch release on 0.6.0's header: rounded corners and a shadow as GTK draws them, square

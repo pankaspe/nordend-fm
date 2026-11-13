@@ -101,6 +101,9 @@ std::vector<PaletteItem> Browser::palette_items() {
     if (editable && terminal_) {
         command(Command::open_terminal, "open_terminal", "Open in Terminal");
     }
+    if (folder) {
+        command(Command::copy_path, "copy_path", "Copy Path");
+    }
     if (folder && folder->path().has_parent_path() &&
         folder->path() != folder->path().root_path()) {
         view_command("parent", "Go to Parent Folder", "Alt+↑", XKB_KEY_Up, {.alt = true});

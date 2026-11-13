@@ -272,8 +272,8 @@ TEST_CASE("context menu: the items for one entry, several, empty space; paste on
     CHECK(f.browser.status_bar().message() == "Ctrl+V copies “sub” where you want them");
     f.select({});
     CHECK(f.press(key(XKB_KEY_Menu)));
-    CHECK(ids(f.menu().items()) ==
-          Names{"new_folder", "new_file", "paste", "add_bookmark", "open_terminal", "sort"});
+    CHECK(ids(f.menu().items()) == Names{"new_folder", "new_file", "paste", "add_bookmark",
+                                         "open_terminal", "copy_path", "sort"});
     REQUIRE(f.settle());  // the templates looked for: none
     CHECK(ids(f.menu().items()[1].children) == Names{"empty_file"});
 }

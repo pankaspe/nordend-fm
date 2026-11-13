@@ -22,8 +22,8 @@ env:
   # Build tools and Nordend's libraries (packaging/void/nordend/template), then what the tests
   # use: doctest, the MIME database, Mesa's software renderer (llvmpipe: the tests that draw
   # run instead of skipping), a font, LibRaw for the DNG comparison (with LLVM's OpenMP for
-  # clang, which its pkg-config asks for), the sanitizers' runtime for the ASan job, and a cursor
-  # theme for the cursor tests.
+  # clang, which its pkg-config asks for), the sanitizers' runtime for the ASan job, a cursor
+  # theme for the cursor tests, and dbus-daemon for the bus loop's private bus.
   PACKAGES: >-
     bash git cmake ninja pkgconf gcc clang21
     wayland-devel wayland-protocols libglvnd-devel libxkbcommon-devel harfbuzz-devel
@@ -31,6 +31,7 @@ env:
     sdbus-c++-devel
     doctest-devel shared-mime-info mesa-dri dejavu-fonts-ttf libraw-devel libomp-devel
     libsanitizer-devel adwaita-icon-theme
+    dbus
 
 jobs:
   format:

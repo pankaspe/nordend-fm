@@ -1,8 +1,8 @@
 # Nordend configuration: ~/.config/nordend/config.toml ($XDG_CONFIG_HOME/nordend/config.toml).
 # Every key is optional; the values below are the defaults. A bad value is reported in the log
 # and keeps its default. Check a file without starting Nordend: nordend --check-config
-# Nordend reads the file again when it changes: background opacity, corners, double click
-# and the icon at once, fonts at the next start.
+# Nordend reads the file again when it changes: background opacity, corners, double click,
+# the icon and the terminal at once, fonts at the next start.
 #
 # Colours are not set here: Nordend follows your theme by itself (GTK's colours in
 # ~/.config/gtk-4.0/gtk.css, else the desktop's light or dark style and accent). For exact colours
@@ -41,3 +41,12 @@ corner_radius = 12
 # Nordend writes it to ~/.local/share/icons/hicolor/scalable/apps/nordend.svg, where the dock and
 # the launcher look first. false takes it away and leaves the installed icon.
 follow_accent = true
+
+[terminal]
+# The terminal "Open in Terminal" (F4) and terminal applications (Terminal=true) use, read live.
+# Not set by default: then $TERMINAL, xdg-terminal-exec, then the first of foot, ghostty, kitty,
+# alacritty, wezterm, konsole, gnome-terminal and xterm that is installed. A program that is not
+# found is reported in the log and the same order follows. The known terminals keep their own way
+# of running a command; any other gets -e. args are its own options, before the command.
+# program = "ghostty"
+# args = []

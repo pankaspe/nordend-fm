@@ -247,6 +247,30 @@ TEST_CASE("clipboard: Ctrl+C and Ctrl+X offer the files to other programs") {
     CHECK(listing(f.root / "album") == Names{"P1.ORF", "P1.ORF.xmp"});
 }
 
+TEST_CASE("clipboard: Ctrl+Shift+C copies the shown folder's path as text, whatever is selected") {
+    Fixture f;
+    const fs::path photos = f.root / "photos";
+    f.show(photos, "P1.ORF");
+    f.browser.details().folder()->select_all();
+
+    // Files taken before: the text replaces them, Ctrl+V has nothing of Nordend's to paste.
+    CHECK(f.press(key(XKB_KEY_c, {.ctrl = true})));
+    CHECK(f.press(key(XKB_KEY_C, {.ctrl = true, .shift = true})));
+    CHECK(f.clipboard.ours);
+    CHECK(f.clipboard.data(views::kText) == photos.string());
+    CHECK(f.clipboard.data("UTF8_STRING") == photos.string());
+    CHECK(f.clipboard.data("text/plain") == photos.string());
+    CHECK(f.clipboard.data(views::kUriList).empty());
+    CHECK(f.clipboard.data(views::kGnomeFiles).empty());
+    CHECK(f.browser.status_bar().message() == "Copied " + photos.string());
+    CHECK(f.browser.details().folder()->selected_count() == 3);  // the selection stays
+
+    // An empty folder too, and the Caps Lock keysym.
+    f.show(f.root / "album", "");
+    CHECK(f.press(key(XKB_KEY_c, {.ctrl = true, .shift = true})));
+    CHECK(f.clipboard.data(views::kText) == (f.root / "album").string());
+}
+
 TEST_CASE("clipboard: Ctrl+V pastes another program's files: copied, or moved when cut") {
     Fixture f;
     const fs::path p2 = f.root / "photos" / "P2.ORF";

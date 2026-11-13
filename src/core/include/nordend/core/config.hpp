@@ -40,10 +40,18 @@ struct Config {
         int corner_radius{12};
     };
 
+    struct Terminal {
+        // The terminal "Open in Terminal" and Terminal=true applications use, tried before
+        // $TERMINAL; empty: $TERMINAL, xdg-terminal-exec, then the known ones. Followed live.
+        std::string program;
+        std::vector<std::string> args;  // its own options, before the command
+    };
+
     Font font;
     Pointer pointer;
     Icon icon;
     Window window;
+    Terminal terminal;
 };
 
 struct ConfigResult {

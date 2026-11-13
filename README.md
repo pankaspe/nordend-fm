@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/pankaspe/nordend-fm/releases/tag/v0.6.1"><img src="https://img.shields.io/badge/release-v0.6.1-2a6a9e" alt="release v0.6.1"></a>
+  <a href="https://github.com/pankaspe/nordend-fm/releases/tag/v0.6.2"><img src="https://img.shields.io/badge/release-v0.6.2-2a6a9e" alt="release v0.6.2"></a>
   <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white" alt="C++20">
   <img src="https://img.shields.io/badge/Wayland-native-FFBC00?logo=wayland&logoColor=black" alt="Wayland native">
-  <img src="https://img.shields.io/badge/tests-450%20%C2%B7%20ASan%20%C2%B7%20TSan-4B32C3" alt="450 tests, ASan, TSan">
+  <img src="https://img.shields.io/badge/tests-453%20%C2%B7%20ASan%20%C2%B7%20TSan-4B32C3" alt="453 tests, ASan, TSan">
   <a href="https://github.com/pankaspe/nordend-fm/actions/workflows/ci.yml"><img src="https://github.com/pankaspe/nordend-fm/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <img src="https://img.shields.io/badge/license-MIT-3DA639" alt="MIT license">
 </p>
@@ -24,11 +24,11 @@
 </p>
 
 > [!NOTE]
-> **Nordend 0.6.1**, the latest release: **rounded corners and a soft shadow** around Nordend's
-> own header, as GTK draws them (square with `[window] corner_radius = 0`); a **see-through
-> background** with solid text, icons and pictures (`[window] background_opacity`, by
-> barrulus); and a clean exit at logout, with your tabs and views saved. Young software, used
-> every day by its author. On Void Linux, [install it as a package](#on-void-linux); on NixOS or
+> **Nordend 0.6.2**, the latest release: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> **copies
+> the path of the folder you're in** (also "Copy Path" in the menu and the command palette), and
+> **`[terminal]` in `config.toml` picks the terminal** that <kbd>F4</kbd> and terminal apps open,
+> before `$TERMINAL`; both asked for by Evergaster. Young software, used every day by its
+> author. On Void Linux, [install it as a package](#on-void-linux); on NixOS or
 > with Nix, from [its flake](#on-nixos-and-with-nix); anywhere else,
 > [build it from source](#from-source) in about a minute.
 
@@ -89,7 +89,7 @@ every shortcut.
   clipboard
 - **Sidebar:** places, GTK bookmarks, disks through udisks2 (mount, unmount, eject)
 - **Opening:** default applications and "Open With", resolved exactly as GLib does; a terminal
-  in any folder (<kbd>F4</kbd>)
+  in any folder (<kbd>F4</kbd>), the one you choose in `config.toml`
 - **Always current:** folders follow changes on disk (inotify); history with
   <kbd>Alt</kbd>+<kbd>←</kbd> <kbd>→</kbd> and the mouse's side buttons
 - **Looks:** your theme's colours live, read like a GTK app reads them (Noctalia, Stylix,
@@ -102,9 +102,9 @@ every shortcut.
 
 | | |
 |---|---|
-| Binary | **4.09 MB** (3.42 MB stripped), x86-64; the decoders and text readers in `nordend-preview`, 1.15 MB (1.03 stripped), a separate caged helper |
+| Binary | **4.11 MB** (3.42 MB stripped), x86-64; the decoders and text readers in `nordend-preview`, 1.15 MB (1.03 stripped), a separate caged helper |
 | Libraries | 17 direct (the helper: 8); no GTK, no Qt, no GLib |
-| Code | about 52 800 lines of C++20, 18 800 of tests (450 test cases, under ASan and TSan too) |
+| Code | about 52 900 lines of C++20, 18 900 of tests (453 test cases, under ASan and TSan too) |
 | Memory | **25 MB** of its own at start; pictures are decoded in the helpers, which give their memory back after a quiet second |
 | Idle | **0 CPU**: nothing is drawn while nothing moves |
 
@@ -145,7 +145,7 @@ cp -r /tmp/nordend-fm/packaging/void/nordend srcpkgs/
 sudo xbps-install -R hostdir/binpkgs nordend
 ```
 
-The package is the latest release, **0.6.1**. What `main` gains after it comes with the next
+The package is the latest release, **0.6.2**. What `main` gains after it comes with the next
 release; to have it at once, build from source.
 
 ### On NixOS and with Nix
@@ -225,6 +225,7 @@ settled.
 
 | Version | What it brought |
 |---|---|
+| [0.6.2](https://github.com/pankaspe/nordend-fm/releases/tag/v0.6.2), 2026-11-13 | Copy the shown folder's path (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>, "Copy Path" on empty space and in the command palette); the terminal chosen in `config.toml` (`[terminal] program` and `args`, live), before `$TERMINAL`, for Open in Terminal and terminal apps; both from Evergaster's issue |
 | [0.6.1](https://github.com/pankaspe/nordend-fm/releases/tag/v0.6.1), 2026-11-13 | Rounded corners and a soft shadow around Nordend's own header, as GTK draws them (square with `[window] corner_radius = 0`); the shadow's edge resizes the window; a see-through background with solid text, icons and pictures (`[window] background_opacity`, by barrulus); a clean exit at logout, with the session's tabs and views saved, when the session bus goes first (GNOME) |
 | [0.6.0](https://github.com/pankaspe/nordend-fm/releases/tag/v0.6.0), 2026-11-13 | Colours from your theme with nothing to set up, read as GTK apps read them (Noctalia, Stylix, matugen, your own `gtk.css`), live; one header, as in a modern file manager: the sidebar to the top, back and forward, the path and the window's buttons in one row (`[window] title_bar = "compositor"` for the compositor's bar), tried on Umbriel, GNOME and Plasma |
 | [0.5.1](https://github.com/pankaspe/nordend-fm/releases/tag/v0.5.1), 2026-11-13 | Grid thumbnails up to 512 px, sharp from the larger caches (icons stay at 256); builds hardened on every system (stack protection, full RELRO, `_FORTIFY_SOURCE=3`, the standard library's index checks); a Nix flake, built and tested in Nix's sandbox on every push; sorting by type puts a file whose name has several types (`.md` with shared-mime-info 2.5) among its likely type |
@@ -247,7 +248,8 @@ lists; 0.3.0 the command palette (<kbd>Ctrl</kbd>+<kbd>K</kbd>) and finding file
 code in caged helpers; 0.5.0 text previews with syntax colours, selecting and copying; 0.5.1
 grid thumbnails up to 512 px, hardened builds and a Nix flake; 0.6.0 the colours of your theme
 with nothing to set up and one header for the whole window; 0.6.1 rounded corners and a shadow
-around it, square corners or a see-through background on request. Coming, roughly in this order:
+around it, square corners or a see-through background on request; 0.6.2 copying the folder's
+path and choosing the terminal. Coming, roughly in this order:
 **a file chooser for other applications** (the desktop portal's, with the grid and thumbnails);
 then **previews, one family at a time**: other common formats one by one (SVG, AVIF, fonts,
 archive contents, audio tags).

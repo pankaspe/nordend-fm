@@ -386,18 +386,31 @@ void Browser::take_selection(bool cut) {
                  false);
 }
 
-void Browser::copy_text(std::string text) {
+void Browser::copy_text(std::string text, std::string message) {
     // The clipboard holds text now, not files: Ctrl+V has nothing to paste here.
     clipboard_ = {};
     cut_marks_ = {};
-    const auto lines = static_cast<std::size_t>(std::ranges::count(text, '\n')) + 1;
-    const std::string what = lines == 1
-                                 ? std::format("{} characters", column_at_byte(text, text.size()))
-                                 : std::format("{} lines", lines);
+    if (message.empty()) {
+        const auto lines = static_cast<std::size_t>(std::ranges::count(text, '\n')) + 1;
+        message = lines == 1
+                      ? std::format("Copied {} characters", column_at_byte(text, text.size()))
+                      : std::format("Copied {} lines", lines);
+    }
     if (system_.offer) {
         system_.offer({{std::string{kText}, text}, {"UTF8_STRING", text}, {"text/plain", text}});
     }
-    show_message(std::format("Copied {}", what), false);
+    show_message(message, false);
+}
+
+void Browser::copy_path() {
+    const std::shared_ptr<Folder> folder = current_folder();
+    if (!folder) {
+        return;
+    }
+    // The entries' paths are Ctrl+C's: as text, other programs paste them too.
+    std::string path = folder->path().string();
+    std::string message = std::format("Copied {}", path);
+    copy_text(std::move(path), std::move(message));
 }
 
 void Browser::paste() {
@@ -1639,6 +1652,12 @@ std::vector<MenuItem> Browser::folder_menu() {
             terminal.action = [this, path = shown->path()] { terminal_(path); };
             items.push_back(std::move(terminal));
         }
+        MenuItem copy_path;
+        copy_path.id = "copy_path";
+        copy_path.label = "Copy Path";
+        copy_path.keys = keys_for(Command::copy_path);
+        copy_path.action = [this] { this->copy_path(); };
+        items.push_back(std::move(copy_path));
     }
     items.push_back(sort_menu());
     return items;
@@ -3475,6 +3494,9 @@ void Browser::run(Command command, Clock::time_point now) {
             break;
         case Command::copy:
             take_selection(false);
+            break;
+        case Command::copy_path:
+            copy_path();
             break;
         case Command::cut:
             take_selection(true);

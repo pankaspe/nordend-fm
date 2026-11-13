@@ -94,6 +94,9 @@ public:
     // foot…", or "No terminal found: set $TERMINAL".
     void open_terminal(const std::filesystem::path& directory);
 
+    // config.toml's [terminal] changed: Environment::configured_terminal from now on.
+    void set_terminal(std::vector<std::string> configured);
+
     // The applications for entry (its type detected if unknown), worked out on a worker and
     // handed to done on the loop thread.
     void choices(const std::filesystem::path& directory, fs::Entry entry,
