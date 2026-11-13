@@ -14,9 +14,9 @@
 
 namespace nordend::views {
 
-// The question before something that cannot be undone (deleting for good), on a card over the
-// window: Enter does it, Escape gives up; so do its two buttons. While it is open it takes every
-// key and click.
+// The question before something that cannot be undone (deleting for good, replacing a file
+// when saving), on a card over the window: Enter does it, Escape gives up; so do its two buttons.
+// While it is open it takes every key and click.
 //
 // Loop thread only.
 class ConfirmDialog {
@@ -27,8 +27,10 @@ public:
     explicit ConfirmDialog(std::function<void()> redraw);
 
     // title: "Delete “P1.ORF” permanently?"; detail: the line under it ("Adding up the size…",
-    // changed later by set_detail); action: the button that does it ("Delete").
-    void open(std::string title, std::string detail, std::string action, Answer answer);
+    // changed later by set_detail); action: the button that does it ("Delete"); note: the dimmed
+    // line under the detail.
+    void open(std::string title, std::string detail, std::string action, Answer answer,
+              std::string note = "Nothing goes to the trash: this cannot be undone.");
 
     void set_detail(std::string detail);
 
@@ -66,6 +68,7 @@ private:
     std::string title_;
     std::string detail_;
     std::string action_;
+    std::string note_;
     Answer answer_;
     std::array<ui::Rect, kButtons> buttons_{};  // as last drawn
     std::optional<std::size_t> hovered_;

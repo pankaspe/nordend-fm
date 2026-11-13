@@ -12,6 +12,7 @@
 #include <string>
 #include <string_view>
 #include <sys/types.h>
+#include <utility>
 #include <vector>
 
 #include "nordend/core/event_loop.hpp"
@@ -38,6 +39,10 @@ using Options = std::map<std::string, sdbus::Variant>;
 // A filter as the portal sends it, (sa(us)): a label and rules, 0 = a glob, 1 = a MIME type.
 using FilterRule = sdbus::Struct<std::uint32_t, std::string>;
 using Filter = sdbus::Struct<std::string, std::vector<FilterRule>>;
+// An application's choice, (ssa(ss)s): id, label, options (id, label; none: a checkbox),
+// the one selected at first.
+using ChoiceOption = sdbus::Struct<std::string, std::string>;
+using Choice = sdbus::Struct<std::string, std::string, std::vector<ChoiceOption>, std::string>;
 
 // What an application asked for, as far as Nordend follows it.
 struct PickRequest {
@@ -49,6 +54,12 @@ struct PickRequest {
     std::filesystem::path folder;       // where to start; empty: the picker's own choice
     std::vector<Filter> filters;        // as asked, to answer with the one in use
     std::optional<std::size_t> filter;  // current_filter's place in filters
+    std::vector<Choice> choices;
+    // Saving: the name proposed (SaveFile), or the names saved into the folder chosen
+    // (SaveFiles).
+    bool save{false};
+    std::string name;
+    std::vector<std::string> files;
 };
 
 // A portal filter as Nordend filters files (rules of another kind are left out).
@@ -57,6 +68,16 @@ struct PickRequest {
 // OpenFile's arguments: options of another type than the spec's are left out.
 [[nodiscard]] PickRequest open_file_request(std::string title, std::string parent_window,
                                             const Options& options);
+
+// SaveFile's: current_name, else current_file's name, proposed; current_file's folder unless
+// current_folder says another.
+[[nodiscard]] PickRequest save_file_request(std::string title, std::string parent_window,
+                                            const Options& options);
+
+// SaveFiles's: the names of `files` (paths are cut to their last part; empty or odd ones left
+// out), saved into the folder chosen.
+[[nodiscard]] PickRequest save_files_request(std::string title, std::string parent_window,
+                                             const Options& options);
 
 // The picker's command line after its program: --pick [--multiple] [--folders] [--title TITLE]
 // [--accept-label TEXT] [--filter LABEL [--glob P]... [--mime T]...]... [--current-filter N]
@@ -68,6 +89,7 @@ struct PickResult {
     std::uint32_t response{kResponseOther};
     std::vector<std::string> uris;
     std::optional<std::size_t> filter;  // "filter:N": the filter in use when it chose
+    std::vector<std::pair<std::string, std::string>> choices;  // "choice:ID=VALUE"
 };
 
 // From the picker's output (one file:// URI a line, "filter:N"; other lines are left out) and
@@ -113,7 +135,7 @@ private:
 
 // org.freedesktop.impl.portal.FileChooser on connection at kObjectPath: OpenFile starts a picker
 // and answers when it ends; Request.Close at the request's handle stops it. SaveFile and
-// SaveFiles answer "other" for now (4c). Loop thread only; connection and bus outlive it.
+// SaveFiles the same, the picker saving. Loop thread only; connection and bus outlive it.
 class FileChooser {
 public:
     FileChooser(core::EventLoop& loop, sdbus::IConnection& connection, platform::BusLoop& bus,

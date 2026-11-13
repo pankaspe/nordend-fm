@@ -72,7 +72,8 @@ Browser::Browser(core::EventLoop& loop, core::WorkerPool& pool, fs::DirectoryWat
                              cancel_();
                          }
                      },
-                 .filters = [this](float x, float y) { show_pick_filters(x, y); }}},
+                 .new_folder = [this] { new_folder(); },
+                 .item = [this](std::size_t item, float x, float y) { pick_item(item, x, y); }}},
       shortcuts_{redraw},
       editor_{redraw,
               [this](const std::shared_ptr<Folder>& folder, const std::string& from,
@@ -591,6 +592,8 @@ void Browser::paste_text() {
                          }
                          if (palette_.is_open()) {
                              palette_.paste(*text);
+                         } else if (pick_bar_.name_focused()) {
+                             pick_bar_.paste(*text);
                          } else {
                              editor_.paste(*text);
                          }
@@ -2208,6 +2211,7 @@ void Browser::draw(ui::Renderer& renderer, const ui::Rect& bounds, const theme::
     editor_.slot().rect.reset();  // the view places it again if it shows the name
     view_area_ = {view.x, view.y + path_row, view.width,
                   std::max(0.0F, view.height - path_row - bar - pick_bar)};
+    follow_pick_cursor();
     draw_view(renderer, view_area_, palette, icons, now);
     draw_band(renderer, palette);
     editor_.draw(renderer, palette);
@@ -2351,6 +2355,9 @@ ui::CursorShape Browser::cursor_at(float x, float y) const {
         return hand(status_bar_.clickable_at(x, y));
     }
     if (pick_ && pick_bar_.claims(x, y)) {
+        if (pick_bar_.editable_at(x, y)) {
+            return Shape::text;
+        }
         return hand(pick_bar_.clickable_at(x, y));
     }
     return hand(info_pane_.clickable_at(x, y));
@@ -2472,6 +2479,9 @@ void Browser::dispatch_pointer(const ui::PointerEvent& event, Clock::time_point 
         button_held_ = true;
         if (pointer_target_ != Target::sidebar && sidebar_.focused()) {
             sidebar_.set_focused(false);  // a click elsewhere takes the keyboard back
+        }
+        if (pointer_target_ == Target::view) {
+            pick_bar_.set_name_focused(false);  // saving: the view has the keyboard now
         }
     } else if (event.kind == Kind::release) {
         button_held_ = false;
@@ -3446,6 +3456,26 @@ bool Browser::take_key(const ui::KeyEvent& event, Clock::time_point now) {
         quick_look_.follow(current_folder());
         return handled;
     }
+    if (pick_ && pick_bar_.saving() && event.keysym == XKB_KEY_Tab &&
+        event.modifiers == ui::Modifiers{}) {
+        pick_bar_.set_name_focused(!pick_bar_.name_focused());  // the name and the view
+        return true;
+    }
+    if (pick_bar_.name_focused()) {
+        if ((event.keysym == XKB_KEY_Return || event.keysym == XKB_KEY_KP_Enter) &&
+            !event.modifiers.alt) {
+            accept_pick();
+            return true;
+        }
+        if (event.modifiers == ui::Modifiers{.ctrl = true} &&
+            (event.keysym == XKB_KEY_v || event.keysym == XKB_KEY_V)) {
+            paste_text();
+            return true;
+        }
+        if (pick_bar_.name_key(event)) {
+            return true;
+        }
+    }
     if (pick_ && event.keysym == XKB_KEY_Escape && event.modifiers == ui::Modifiers{}) {
         if (cancel_) {
             cancel_();
@@ -3625,6 +3655,11 @@ bool Browser::open_selection() {
             }
         }
     }
+    if (pick_ && pick_->save) {
+        pick_bar_.set_name(cursor->name);  // Enter on a file: save over it (after asking)
+        save_pick();
+        return true;
+    }
     if (pick_) {
         std::vector<std::filesystem::path> paths;
         paths.reserve(files.size());
@@ -3642,14 +3677,34 @@ void Browser::set_pick(Pick pick, Chosen chosen, std::function<void()> cancel) {
     pick_ = std::move(pick);
     chosen_ = std::move(chosen);
     cancel_ = std::move(cancel);
-    if (!pick_->filters.empty()) {
-        pick_->filter = std::min(pick_->filter, pick_->filters.size() - 1);
+    Pick& now = *pick_;
+    if (!now.files.empty()) {
+        now.save = true;
+        now.folders = true;  // a folder to save them into
     }
-    std::string accept = pick_->accept_label;
-    if (accept.empty()) {
-        accept = pick_->folders ? "Select" : "Open";
+    if (!now.filters.empty()) {
+        now.filter = std::min(now.filter, now.filters.size() - 1);
+    }
+    for (Choice& choice : now.choices) {
+        const bool known = choice.options.empty()
+                               ? choice.selected == "true" || choice.selected == "false"
+                               : std::ranges::any_of(choice.options, [&choice](const auto& option) {
+                                     return option.first == choice.selected;
+                                 });
+        if (!known) {
+            choice.selected = choice.options.empty() ? "false" : choice.options.front().first;
+        }
+    }
+    std::string accept = now.accept_label;
+    if (accept.empty() && now.save) {
+        accept = "Save";
+    } else if (accept.empty()) {
+        accept = now.folders ? "Select" : "Open";
     }
     pick_bar_.set_accept_label(accept);
+    pick_bar_.set_save(now.save && now.files.empty() ? std::optional<std::string>{now.name}
+                                                     : std::nullopt);
+    pick_cursor_.clear();
     apply_pick_filter();
 }
 
@@ -3668,6 +3723,14 @@ void Browser::set_pick_filter(std::size_t index) {
     apply_pick_filter();
 }
 
+void Browser::set_pick_choice(std::size_t choice, std::string option) {
+    if (!pick_ || choice >= pick_->choices.size()) {
+        return;
+    }
+    pick_->choices[choice].selected = std::move(option);
+    update_pick_items();
+}
+
 void Browser::apply_pick_filter() {
     if (!pick_) {
         return;
@@ -3683,31 +3746,102 @@ void Browser::apply_pick_filter() {
             return entry.is_directory() || match->passes(entry);
         };
     }
-    pick_bar_.set_filter_label(
-        pick.filters.empty() || pick.folders ? std::string{} : pick.filters.at(pick.filter).label);
     for (const std::unique_ptr<Pane>& each : panes_) {
         each->columns.set_only(only_);
         each->grid.set_only(only_);
         each->details.set_only(only_);
     }
+    update_pick_items();
+}
+
+void Browser::update_pick_items() {
+    if (!pick_) {
+        return;
+    }
+    const Pick& pick = *pick_;
+    std::vector<PickBar::Item> items;
+    if (!pick.filters.empty() && !pick.folders) {
+        items.push_back({.text = pick.filters.at(pick.filter).label});
+    }
+    for (const Choice& choice : pick.choices) {
+        if (choice.options.empty()) {
+            items.push_back(
+                {.text = choice.label, .checkbox = true, .checked = choice.selected == "true"});
+            continue;
+        }
+        std::string shown = choice.selected;
+        for (const auto& [id, label] : choice.options) {
+            if (id == choice.selected) {
+                shown = label;
+            }
+        }
+        items.push_back({.text = choice.label.empty() ? shown : choice.label + ": " + shown});
+    }
+    pick_bar_.set_items(std::move(items));
     redraw_();
 }
 
-void Browser::show_pick_filters(float x, float y) {
-    if (!pick_ || pick_->filters.empty()) {
+void Browser::pick_item(std::size_t item, float x, float y) {
+    if (!pick_) {
         return;
     }
+    const Pick& pick = *pick_;
+    const bool has_filter = !pick.filters.empty() && !pick.folders;
     std::vector<MenuItem> items;
-    for (std::size_t i = 0; i < pick_->filters.size(); ++i) {
-        MenuItem item;
-        item.id = "filter:" + std::to_string(i);
-        item.label = pick_->filters[i].label;
-        item.radio = true;
-        item.checked = i == pick_->filter;
-        item.action = [this, i] { set_pick_filter(i); };
-        items.push_back(std::move(item));
+    if (has_filter && item == 0) {
+        for (std::size_t i = 0; i < pick.filters.size(); ++i) {
+            MenuItem entry;
+            entry.id = "filter:" + std::to_string(i);
+            entry.label = pick.filters[i].label;
+            entry.radio = true;
+            entry.checked = i == pick.filter;
+            entry.action = [this, i] { set_pick_filter(i); };
+            items.push_back(std::move(entry));
+        }
+        menu_.open(x, y, std::move(items), false);
+        return;
+    }
+    const std::size_t index = item - (has_filter ? 1 : 0);
+    if (index >= pick.choices.size()) {
+        return;
+    }
+    const Choice& choice = pick.choices[index];
+    if (choice.options.empty()) {
+        set_pick_choice(index, choice.selected == "true" ? "false" : "true");
+        return;
+    }
+    for (const auto& [id, label] : choice.options) {
+        MenuItem entry;
+        entry.id = "choice:" + id;
+        entry.label = label;
+        entry.radio = true;
+        entry.checked = id == choice.selected;
+        entry.action = [this, index, option = id] { set_pick_choice(index, option); };
+        items.push_back(std::move(entry));
     }
     menu_.open(x, y, std::move(items), false);
+}
+
+void Browser::follow_pick_cursor() {
+    if (!pick_ || !pick_bar_.saving()) {
+        return;
+    }
+    const std::shared_ptr<Folder> folder = current_folder();
+    if (!folder) {
+        return;
+    }
+    const fs::Entry* const cursor = folder->cursor_entry();
+    const std::string folder_key = folder->path().string() + '\0';
+    const std::string key = folder_key + (cursor != nullptr ? cursor->name : std::string{});
+    if (key == pick_cursor_) {
+        return;
+    }
+    // Only a move inside the same folder: opening one never takes the name typed away.
+    const bool same_folder = pick_cursor_.starts_with(folder_key);
+    pick_cursor_ = key;
+    if (same_folder && cursor != nullptr && !cursor->is_directory()) {
+        pick_bar_.set_name(cursor->name);
+    }
 }
 
 void Browser::accept_pick() {
@@ -3716,6 +3850,10 @@ void Browser::accept_pick() {
     }
     const std::shared_ptr<Folder> folder = current_folder();
     if (!folder) {
+        return;
+    }
+    if (pick_->save && pick_->files.empty()) {
+        save_pick();
         return;
     }
     const fs::Entry* const cursor = folder->cursor_entry();
@@ -3735,6 +3873,10 @@ void Browser::accept_pick() {
         } else {
             paths.push_back(folder->path());
         }
+        if (pick_->save) {
+            save_files_into(paths.front());
+            return;
+        }
         choose(std::move(paths));
         return;
     }
@@ -3752,16 +3894,102 @@ void Browser::accept_pick() {
     open_selection();
 }
 
+void Browser::save_pick() {
+    const std::shared_ptr<Folder> folder = current_folder();
+    if (!pick_ || !folder) {
+        return;
+    }
+    const std::string name = pick_bar_.name();
+    if (name.empty() || name == "." || name == "..") {
+        show_message("Type a name for the file", false);
+        pick_bar_.set_name_focused(true);
+        return;
+    }
+    if (name.find('/') != std::string::npos) {
+        show_message("A name cannot hold \u201c/\u201d", true);
+        pick_bar_.set_name_focused(true);
+        return;
+    }
+    if (folder->is_trash()) {
+        show_message("Nothing can be saved in the trash", false);
+        return;
+    }
+    const std::filesystem::path target = folder->path() / name;
+    std::error_code error;
+    const std::filesystem::file_status status = std::filesystem::status(target, error);
+    if (std::filesystem::is_directory(status)) {
+        const std::string proposed = pick_->name;
+        open(target);  // a folder's name: into it, as a chooser does
+        pick_bar_.set_name(proposed);
+        return;
+    }
+    if (!std::filesystem::exists(std::filesystem::symlink_status(target, error))) {
+        choose({target});
+        return;
+    }
+    confirm_.open(
+        std::format("Replace \u201c{}\u201d?", name),
+        std::format("A file with this name is already in {}.", folder->path().filename().string()),
+        "Replace",
+        [this, target](bool confirmed) {
+            if (confirmed) {
+                choose({target});
+            }
+        },
+        "The application writes its file over it.");
+}
+
+void Browser::save_files_into(const std::filesystem::path& folder) {
+    if (!pick_) {
+        return;
+    }
+    std::vector<std::filesystem::path> paths;
+    std::vector<std::string> there;
+    for (const std::string& name : pick_->files) {
+        const std::filesystem::path target = folder / name;
+        std::error_code error;
+        if (std::filesystem::exists(std::filesystem::symlink_status(target, error))) {
+            there.push_back(name);
+        }
+        paths.push_back(target);
+    }
+    if (there.empty()) {
+        choose(std::move(paths));
+        return;
+    }
+    std::string detail = std::format("\u201c{}\u201d", there.front());
+    if (there.size() > 1) {
+        detail += std::format(" and {} more", there.size() - 1);
+    }
+    detail += std::format(" already in {}.", folder.filename().string());
+    confirm_.open(
+        there.size() == 1 ? std::string{"Replace a file?"}
+                          : std::format("Replace {} files?", there.size()),
+        std::move(detail), "Replace",
+        [this, paths = std::move(paths)](bool confirmed) mutable {
+            if (confirmed) {
+                choose(std::move(paths));
+            }
+        },
+        "The application writes its files over them.");
+}
+
 void Browser::choose(std::vector<std::filesystem::path> paths) {
     if (!pick_ || paths.empty()) {
         return;
     }
-    if (!pick_->multiple && paths.size() > 1) {
+    if (!pick_->multiple && !pick_->save && paths.size() > 1) {
         show_message(pick_->folders ? "Choose one folder" : "Choose one file", false);
         return;
     }
+    Picked picked;
+    picked.paths = std::move(paths);
+    picked.filter = pick_filter();
+    for (const Choice& choice : pick_->choices) {
+        picked.choices.emplace_back(choice.id, choice.selected);
+    }
     if (chosen_) {
-        chosen_(std::move(paths), pick_filter());
+        chosen_(std::move(picked));
     }
 }
 

@@ -213,6 +213,10 @@ constexpr const char* kUsage =
     "  --filter LABEL  with --pick: a filter offered, of the --glob and --mime after it\n"
     "  --current-filter N  the filter in use at first (0 = the first --filter)\n"
     "  --parent        with --pick: the application's window, as xdg-foreign exports it\n"
+    "  --save          with --pick: save; --name NAME proposes the name, each --file NAME is\n"
+    "                  saved into the folder chosen instead\n"
+    "  --choice ID LABEL DEFAULT  an application's choice, its --option ID LABEL after it (none:\n"
+    "                  a checkbox, true or false); printed as choice:ID=VALUE\n"
     "  --config FILE   read FILE instead of ~/.config/nordend/config.toml\n"
     "  --test-scene    show the renderer test scene instead of a folder\n"
     "  --check-config  report problems in the config file and exit (status 1 if any)\n"
@@ -311,6 +315,26 @@ bool read_pick_option(int argc, char** argv, int& i, PickArgs& args, std::string
         return value(pick.accept_label);
     } else if (arg == "--parent") {
         return value(args.parent);
+    } else if (arg == "--save") {
+        pick.save = true;
+    } else if (arg == "--name") {
+        return value(pick.name);
+    } else if (arg == "--file") {
+        pick.files.emplace_back();
+        return value(pick.files.back());
+    } else if (arg == "--choice") {
+        views::Browser::Choice& choice = pick.choices.emplace_back();
+        return value(choice.id) && value(choice.label) && value(choice.selected);
+    } else if (arg == "--option") {
+        if (pick.choices.empty()) {
+            error = "--option goes after a --choice";
+            return false;
+        }
+        std::pair<std::string, std::string> option;
+        if (!value(option.first) || !value(option.second)) {
+            return false;
+        }
+        pick.choices.back().options.push_back(std::move(option));
     } else if (arg == "--filter") {
         pick.filters.emplace_back();
         return value(pick.filters.back().label);
@@ -342,17 +366,19 @@ bool read_pick_option(int argc, char** argv, int& i, PickArgs& args, std::string
     return true;
 }
 
-// What --pick prints: one file:// URI a line, then "filter:N" when filters were offered; written
-// at once. false when it could not be written.
-bool print_choice(const std::vector<std::filesystem::path>& paths,
-                  std::optional<std::size_t> filter) {
+// What --pick prints: one file:// URI a line, then "filter:N" when filters were offered and
+// "choice:ID=VALUE" for each choice; written at once. false when it could not be written.
+bool print_choice(const views::Browser::Picked& picked) {
     std::string out;
-    for (const std::filesystem::path& path : paths) {
+    for (const std::filesystem::path& path : picked.paths) {
         out += core::file_uri(path);
         out += '\n';
     }
-    if (filter) {
-        out += std::format("filter:{}\n", *filter);
+    if (picked.filter) {
+        out += std::format("filter:{}\n", *picked.filter);
+    }
+    for (const auto& [id, value] : picked.choices) {
+        out += std::format("choice:{}={}\n", id, value);
     }
     std::string_view rest{out};
     while (!rest.empty()) {
@@ -427,8 +453,9 @@ int main(int argc, char** argv) {
         }
     }
     const bool pick = pick_args.asked;
-    if (!pick && (pick_args.pick.multiple || pick_args.pick.folders || !pick_args.title.empty() ||
-                  !pick_args.pick.accept_label.empty() || !pick_args.pick.filters.empty() ||
+    const views::Browser::Pick& asked = pick_args.pick;
+    if (!pick && (asked.multiple || asked.folders || asked.save || !pick_args.title.empty() ||
+                  !asked.accept_label.empty() || !asked.filters.empty() || !asked.choices.empty() ||
                   !pick_args.parent.empty())) {
         std::fprintf(stderr, "nordend: those options go with --pick\n%s", kUsage);
         return 2;
@@ -529,6 +556,8 @@ int main(int argc, char** argv) {
         std::string window_title = "Nordend";
         if (!pick_args.title.empty()) {
             window_title = pick_args.title;
+        } else if (pick && pick_args.pick.save) {
+            window_title = pick_args.pick.files.size() > 1 ? "Save Files" : "Save File";
         } else if (pick && pick_args.pick.folders) {
             window_title = "Choose a Folder";
         } else if (pick) {
@@ -662,14 +691,13 @@ int main(int argc, char** argv) {
             if (pick) {
                 columns->set_pick(
                     pick_args.pick,
-                    [&](const std::vector<std::filesystem::path>& paths,
-                        std::optional<std::size_t> filter) {
-                        if (!print_choice(paths, filter)) {
+                    [&](const views::Browser::Picked& picked) {
+                        if (!print_choice(picked)) {
                             log::error("pick: cannot write the choice");
                             loop.quit(2);
                             return;
                         }
-                        log::info("pick: {} chosen", paths.size());
+                        log::info("pick: {} chosen", picked.paths.size());
                         loop.quit(0);
                     },
                     [&] {

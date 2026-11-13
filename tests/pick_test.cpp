@@ -91,6 +91,7 @@ struct Fixture {
     Browser browser{loop, pool, watcher, mime(), [] {}, [](nordend::ui::CursorShape /*shape*/) {}};
     std::vector<std::vector<stdfs::path>> chosen;
     std::vector<std::optional<std::size_t>> filters;
+    std::vector<std::vector<std::pair<std::string, std::string>>> choices;
     int cancelled = 0;
 
     Fixture() {
@@ -103,9 +104,10 @@ struct Fixture {
     void pick(Browser::Pick options) {
         browser.set_pick(
             std::move(options),
-            [this](std::vector<stdfs::path> paths, std::optional<std::size_t> filter) {
-                chosen.push_back(std::move(paths));
-                filters.push_back(filter);
+            [this](Browser::Picked picked) {
+                chosen.push_back(std::move(picked.paths));
+                filters.push_back(picked.filter);
+                choices.push_back(std::move(picked.choices));
             },
             [this] { ++cancelled; });
         browser.columns().open(root);
@@ -119,6 +121,16 @@ struct Fixture {
         event.keysym = key;
         event.modifiers = modifiers;
         browser.key(event, Browser::Clock::now());
+    }
+
+    // Typing into what has the keyboard, a character at a time.
+    void type(std::string_view text) {
+        for (const char c : text) {
+            nordend::ui::KeyEvent event;
+            event.keysym = static_cast<unsigned char>(c);
+            event.text = std::string(1, c);
+            browser.key(event, Browser::Clock::now());
+        }
     }
 
     // The cursor onto name, alone.
@@ -181,18 +193,18 @@ TEST_CASE("listing: only what a filter passes, the rest kept aside and back when
 
 TEST_CASE("pick: the filter decides the files listed; folders always show") {
     Fixture f;
-    f.pick({.multiple = false,
-            .folders = false,
-            .accept_label = "_Open",
-            .filters = {kImages, kText},
-            .filter = 0});
+    Browser::Pick options;
+    options.accept_label = "_Open";
+    options.filters = {kImages, kText};
+    f.pick(options);
     CHECK(f.browser.pick_bar().accept_label() == "Open");
-    CHECK(f.browser.pick_bar().filter_label() == "Images");
+    REQUIRE(f.browser.pick_bar().items().size() == 1);
+    CHECK(f.browser.pick_bar().items()[0].text == "Images");
     CHECK(names(*f.shown()) == std::vector<std::string>{"photos", "a.jpg", "B.JPG"});
     CHECK(nordend::views::status_of(*f.shown()) == "3 items, 3 filtered out");
 
     f.browser.set_pick_filter(1);
-    CHECK(f.browser.pick_bar().filter_label() == "Text");
+    CHECK(f.browser.pick_bar().items()[0].text == "Text");
     CHECK(names(*f.shown()) == std::vector<std::string>{"photos", "main.cpp", "notes.txt"});
 
     // Enter on a file chooses it, with the filter in use.
@@ -221,8 +233,10 @@ TEST_CASE("pick: the filter decides the files listed; folders always show") {
 
 TEST_CASE("pick: several files with --multiple; no filter, every file and no filter line") {
     Fixture f;
-    f.pick({.multiple = true, .folders = false, .accept_label = {}, .filters = {}, .filter = 0});
-    CHECK(f.browser.pick_bar().filter_label().empty());
+    Browser::Pick options;
+    options.multiple = true;
+    f.pick(options);
+    CHECK(f.browser.pick_bar().items().empty());
     CHECK(names(*f.shown()).size() == 6);
     f.cursor_on("a.jpg");
     f.press(XKB_KEY_Down, {.shift = true});  // a.jpg, B.JPG
@@ -234,13 +248,12 @@ TEST_CASE("pick: several files with --multiple; no filter, every file and no fil
 
 TEST_CASE("pick: folders, the one under the cursor or else the one shown") {
     Fixture f;
-    f.pick({.multiple = false,
-            .folders = true,
-            .accept_label = {},
-            .filters = {kImages},
-            .filter = 0});
+    Browser::Pick options;
+    options.folders = true;
+    options.filters = {kImages};
+    f.pick(options);
     CHECK(f.browser.pick_bar().accept_label() == "Select");
-    CHECK(f.browser.pick_bar().filter_label().empty());  // filters are for files
+    CHECK(f.browser.pick_bar().items().empty());  // filters are for files
     CHECK(names(*f.shown()) == std::vector<std::string>{"photos"});
 
     f.cursor_on("photos");
@@ -262,4 +275,123 @@ TEST_CASE("pick bar: the application's word without its mnemonic") {
     CHECK(nordend::views::without_mnemonic("_Open") == "Open");
     CHECK(nordend::views::without_mnemonic("Save __as") == "Save _as");
     CHECK(nordend::views::without_mnemonic("") == "");
+}
+
+TEST_CASE("pick: saving, the name typed into the folder shown, asked before replacing") {
+    Fixture f;
+    Browser::Pick options;
+    options.save = true;
+    options.name = "holiday.jpg";
+    f.pick(options);
+    CHECK(f.browser.pick_bar().accept_label() == "Save");
+    CHECK(f.browser.pick_bar().saving());
+    CHECK(f.browser.pick_bar().name_focused());
+    CHECK(f.browser.pick_bar().name() == "holiday.jpg");
+
+    // The stem is selected: typing replaces it, the extension stays.
+    f.type("sea");
+    CHECK(f.browser.pick_bar().name() == "sea.jpg");
+    f.press(XKB_KEY_Return);
+    REQUIRE(f.chosen.size() == 1);
+    CHECK(f.chosen[0] == std::vector<stdfs::path>{f.root / "sea.jpg"});
+
+    // A name already there: a card first; Escape there keeps the chooser open.
+    f.press(XKB_KEY_a, {.ctrl = true});
+    f.type("a.jpg");
+    f.press(XKB_KEY_Return);
+    CHECK(f.chosen.size() == 1);
+    REQUIRE(f.browser.confirm_dialog().is_open());
+    CHECK(f.browser.confirm_dialog().title() == "Replace \u201ca.jpg\u201d?");
+    f.press(XKB_KEY_Escape);
+    CHECK_FALSE(f.browser.confirm_dialog().is_open());
+    CHECK(f.cancelled == 0);
+    f.press(XKB_KEY_Return);
+    REQUIRE(f.browser.confirm_dialog().is_open());
+    f.press(XKB_KEY_Return);  // Replace
+    REQUIRE(f.chosen.size() == 2);
+    CHECK(f.chosen[1] == std::vector<stdfs::path>{f.root / "a.jpg"});
+
+    // A folder's name: into it.
+    f.press(XKB_KEY_a, {.ctrl = true});
+    f.type("photos");
+    f.press(XKB_KEY_Return);
+    REQUIRE(run_until(f.loop, [&f] { return !f.browser.loading(); }));
+    CHECK(f.shown()->path() == f.root / "photos");
+    CHECK(f.chosen.size() == 2);
+
+    // Names that cannot be.
+    f.press(XKB_KEY_a, {.ctrl = true});
+    f.press(XKB_KEY_BackSpace);
+    f.press(XKB_KEY_Return);
+    CHECK(f.browser.status_bar().message() == "Type a name for the file");
+    f.type("a/b");
+    f.press(XKB_KEY_Return);
+    CHECK(f.chosen.size() == 2);
+}
+
+TEST_CASE(
+    "pick: saving, Tab between the name and the view; a file the cursor goes to lends its name") {
+    Fixture f;
+    Browser::Pick options;
+    options.save = true;
+    options.name = "new.txt";
+    f.pick(options);
+    f.press(XKB_KEY_Tab);
+    CHECK_FALSE(f.browser.pick_bar().name_focused());
+    // Opening the folder did not take the name away; a move inside it does.
+    f.browser.follow_pick_cursor();
+    CHECK(f.browser.pick_bar().name() == "new.txt");
+    f.cursor_on("notes.txt");
+    f.browser.follow_pick_cursor();
+    CHECK(f.browser.pick_bar().name() == "notes.txt");
+    f.press(XKB_KEY_Tab);
+    CHECK(f.browser.pick_bar().name_focused());
+}
+
+TEST_CASE("pick: an application's choices, listed and checked, come back with the choice") {
+    Fixture f;
+    Browser::Pick options;
+    options.choices = {{.id = "encoding",
+                        .label = "Encoding",
+                        .options = {{"utf8", "UTF-8"}, {"latin1", "Latin-1"}},
+                        .selected = "latin1"},
+                       {.id = "ro", .label = "Read-only", .options = {}, .selected = "maybe"}};
+    f.pick(options);
+    const std::vector<nordend::views::PickBar::Item>& items = f.browser.pick_bar().items();
+    REQUIRE(items.size() == 2);
+    CHECK(items[0].text == "Encoding: Latin-1");
+    CHECK(items[1].checkbox);
+    CHECK_FALSE(items[1].checked);  // an unknown default: unchecked
+    f.browser.set_pick_choice(1, "true");
+    CHECK(f.browser.pick_bar().items()[1].checked);
+    f.browser.set_pick_choice(0, "utf8");
+    CHECK(f.browser.pick_bar().items()[0].text == "Encoding: UTF-8");
+    f.cursor_on("notes.txt");
+    f.press(XKB_KEY_Return);
+    REQUIRE(f.choices.size() == 1);
+    CHECK(f.choices[0] ==
+          std::vector<std::pair<std::string, std::string>>{{"encoding", "utf8"}, {"ro", "true"}});
+}
+
+TEST_CASE("pick: saving several files, into the folder chosen, asked once for those there") {
+    Fixture f;
+    Browser::Pick options;
+    options.files = {"a.jpg", "new.txt", "notes.txt"};
+    f.pick(options);
+    CHECK(f.browser.pick_bar().accept_label() == "Save");
+    CHECK_FALSE(f.browser.pick_bar().saving());  // no name field: the names are given
+    CHECK(names(*f.shown()) == std::vector<std::string>{"photos"});
+    f.browser.accept_pick();  // nothing under the cursor: the folder shown
+    REQUIRE(f.browser.confirm_dialog().is_open());
+    CHECK(f.browser.confirm_dialog().title() == "Replace 2 files?");
+    f.press(XKB_KEY_Return);
+    REQUIRE(f.chosen.size() == 1);
+    CHECK(f.chosen[0] ==
+          std::vector<stdfs::path>{f.root / "a.jpg", f.root / "new.txt", f.root / "notes.txt"});
+    // Into a folder without any of them: no question.
+    f.cursor_on("photos");
+    f.browser.accept_pick();
+    CHECK_FALSE(f.browser.confirm_dialog().is_open());
+    REQUIRE(f.chosen.size() == 2);
+    CHECK(f.chosen[1].front() == f.root / "photos" / "a.jpg");
 }

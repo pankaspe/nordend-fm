@@ -469,23 +469,51 @@ public:
     void set_quit_handler(std::function<void()> quit) { quit_ = std::move(quit); }
 
     // Choosing files for an application (nordend --pick, the desktop's file chooser).
+    // An application's own choice in the chooser: a list ("Encoding": UTF-8, Latin-1) or, without
+    // options, a checkbox ("Open read-only": "true" or "false").
+    struct Choice {
+        std::string id;
+        std::string label;
+        std::vector<std::pair<std::string, std::string>> options;  // id, label
+        std::string selected;  // an option's id, or "true"/"false"
+
+        [[nodiscard]] bool operator==(const Choice&) const = default;
+    };
+
     struct Pick {
         bool multiple{false};
         bool folders{false};                  // folders are chosen; files are not listed
         std::string accept_label;             // the application's word ("_Open"); empty: ours
         std::vector<fs::FileFilter> filters;  // empty: every file
         std::size_t filter{0};                // the one in use at first
+        std::vector<Choice> choices;
+        // Saving: the name field shows name. With files (several saved at once), a folder is
+        // chosen and each of them goes into it.
+        bool save{false};
+        std::string name;
+        std::vector<std::string> files;
     };
 
-    // What was chosen: the paths, and the filter in use (nullopt without filters).
-    using Chosen = std::function<void(std::vector<std::filesystem::path> paths,
-                                      std::optional<std::size_t> filter)>;
+    // What was chosen: the paths, the filter in use (nullopt without filters), and each choice's
+    // id with what is selected in it.
+    struct Picked {
+        std::vector<std::filesystem::path> paths;
+        std::optional<std::size_t> filter;
+        std::vector<std::pair<std::string, std::string>> choices;
+    };
+
+    using Chosen = std::function<void(Picked picked)>;
 
     // From now on Enter or a double click on a file (with Pick::multiple, the selected files),
     // Ctrl+Enter and the bar's button choose; Escape (once nothing on screen takes it: a menu, a
-    // dialog, Quick Look) and Cancel cancel. A bar over the status bar shows the filter and the
-    // buttons. Folders open as always; with Pick::folders, Ctrl+Enter and the button choose the
-    // folder under the cursor, else the one shown.
+    // dialog, Quick Look) and Cancel cancel. A bar over the status bar shows the filter, the
+    // choices and the buttons. Folders open as always; with Pick::folders, Ctrl+Enter and the
+    // button choose the folder under the cursor, else the one shown.
+    //
+    // Saving (Pick::save): the name field has the keyboard (Tab: the view, and back); Enter
+    // saves into the folder shown, a name that is a folder opens it, one that exists asks
+    // before replacing it; a file the cursor goes to lends its name. Pick::files: the folder is
+    // chosen as with Pick::folders, and the names already there are asked about at once.
     void set_pick(Pick pick, Chosen chosen, std::function<void()> cancel);
 
     [[nodiscard]] bool picking() const noexcept { return pick_.has_value(); }
@@ -494,8 +522,17 @@ public:
     [[nodiscard]] std::optional<std::size_t> pick_filter() const;
     void set_pick_filter(std::size_t index);
 
+    // A choice set to option (an option's id, or "true"/"false"), as the bar does.
+    void set_pick_choice(std::size_t choice, std::string option);
+
     // The bar's button: what Ctrl+Enter does.
     void accept_pick();
+
+    // Saving: a file the cursor moved to (in the same folder) lends its name to the field.
+    // draw() calls it; tests too.
+    void follow_pick_cursor();
+
+    [[nodiscard]] const ConfirmDialog& confirm_dialog() const noexcept { return confirm_; }
 
     [[nodiscard]] const PickBar& pick_bar() const noexcept { return pick_bar_; }
 
@@ -642,8 +679,14 @@ private:
     bool open_selection();
     // Hands paths to chosen_ (one only without Pick::multiple).
     void choose(std::vector<std::filesystem::path> paths);
+    // Saving: the name typed, into the folder shown (asking before replacing).
+    void save_pick();
+    // Saving several: the names into folder (asking before replacing any).
+    void save_files_into(const std::filesystem::path& folder);
     void apply_pick_filter();
-    void show_pick_filters(float x, float y);
+    void update_pick_items();
+    void pick_item(std::size_t item, float x, float y);
+    std::string pick_cursor_;  // folder + cursor name last seen (follow_pick_cursor)
     // F4: a terminal in the cursor's folder, else in the folder shown.
     void open_terminal();
     void rename(const std::shared_ptr<Folder>& folder, const std::string& from,

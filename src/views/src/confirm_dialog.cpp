@@ -27,7 +27,9 @@ bool contains(const ui::Rect& rect, float x, float y) {
 
 ConfirmDialog::ConfirmDialog(std::function<void()> redraw) : redraw_{std::move(redraw)} {}
 
-void ConfirmDialog::open(std::string title, std::string detail, std::string action, Answer answer) {
+void ConfirmDialog::open(std::string title, std::string detail, std::string action, Answer answer,
+                         std::string note) {
+    note_ = std::move(note);
     title_ = std::move(title);
     detail_ = std::move(detail);
     action_ = std::move(action);
@@ -121,8 +123,7 @@ void ConfirmDialog::draw(ui::Renderer& renderer, const ui::Rect& bounds,
     y += 30.0F;
     renderer.draw_text(detail_, left, y, kTextSize, palette.on_surface, room);
     y += 22.0F;
-    renderer.draw_text("Nothing goes to the trash: this cannot be undone.", left, y, kTextSize,
-                       palette.on_surface_variant, room);
+    renderer.draw_text(note_, left, y, kTextSize, palette.on_surface_variant, room);
     y += 36.0F;
 
     buttons_.at(kAction) = {card.right() - kPadding - kActionWidth, y, kActionWidth, kButtonHeight};

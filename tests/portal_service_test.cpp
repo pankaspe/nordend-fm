@@ -224,6 +224,31 @@ TEST_CASE("portal: OpenFile's options as the picker follows them") {
     }
 }
 
+TEST_CASE("portal: SaveFile's and SaveFiles's options") {
+    portal::Options options;
+    options.emplace("current_file", sdbus::Variant{bytes("/home/me/notes/today.txt")});
+    portal::PickRequest request = portal::save_file_request("Save", "", options);
+    CHECK(request.save);
+    CHECK(request.name == "today.txt");  // the file being saved again, in its folder
+    CHECK(request.folder == "/home/me/notes");
+    options.emplace("current_name", sdbus::Variant{std::string{"copy.txt"}});
+    options.emplace("current_folder", sdbus::Variant{bytes("/tmp")});
+    request = portal::save_file_request("Save", "", options);
+    CHECK(request.name == "copy.txt");
+    CHECK(request.folder == "/tmp");
+    // A name with a path in it keeps its last part.
+    portal::Options odd;
+    odd.emplace("current_name", sdbus::Variant{std::string{"../../etc/passwd"}});
+    CHECK(portal::save_file_request("", "", odd).name == "passwd");
+
+    portal::Options several;
+    several.emplace("files", sdbus::Variant{std::vector<std::vector<std::uint8_t>>{
+                                 bytes("a.jpg"), bytes("/x/b.jpg"), bytes(".."), bytes("")}});
+    const portal::PickRequest files = portal::save_files_request("", "", several);
+    CHECK(files.save);
+    CHECK(files.files == std::vector<std::string>{"a.jpg", "b.jpg"});
+}
+
 TEST_CASE("portal: the picker's output and status make the answer") {
     const std::string output = "a stray line\nfile:///home/me/a%20b.jpg\nfile:///home/me/c.ORF\n";
     portal::PickResult chosen = portal::pick_result(output, exited(0));
@@ -234,6 +259,8 @@ TEST_CASE("portal: the picker's output and status make the answer") {
           std::optional<std::size_t>{1});
     CHECK_FALSE(portal::pick_result(output + "filter:x\n", exited(0)).filter);
     CHECK_FALSE(portal::pick_result("filter:1\n", exited(0)).filter);  // a cancel has none
+    CHECK(portal::pick_result(output + "choice:enc=a=b\nchoice:bad\n", exited(0)).choices ==
+          std::vector<std::pair<std::string, std::string>>{{"enc", "a=b"}});
     // The last line without its newline still counts.
     CHECK(portal::pick_result("file:///x", exited(0)).uris ==
           std::vector<std::string>{"file:///x"});
@@ -323,7 +350,7 @@ TEST_CASE("portal: OpenFile on the bus runs the picker and answers with its choi
         REQUIRE(it != answer->results.end());
         CHECK(it->second.get<portal::Filter>() == text);
     }
-    SUBCASE("folders go to the picker; saving is not there yet: \"other\", without a picker") {
+    SUBCASE("folders go to the picker") {
         round.start("printf 'file:///tmp\\n'");
         portal::Options folders;
         folders.emplace("directory", sdbus::Variant{true});
@@ -331,12 +358,38 @@ TEST_CASE("portal: OpenFile on the bus runs the picker and answers with its choi
         REQUIRE(run_until(round.loop, [&] { return folder->arrived; }));
         CHECK(folder->response == portal::kResponseOk);
         CHECK(round.arguments() == "--pick\n--folders\n--title\nOpen a Photo\n");
-        std::filesystem::remove(round.dir.path / "args");
-        const auto save = round.call("SaveFile", kHandle, {});
-        const auto saves = round.call("SaveFiles", kHandle, {});
-        REQUIRE(run_until(round.loop, [&] { return save->arrived && saves->arrived; }));
-        CHECK(save->response == portal::kResponseOther);
-        CHECK(saves->response == portal::kResponseOther);
-        CHECK_FALSE(std::filesystem::exists(round.dir.path / "args"));
+    }
+    SUBCASE("SaveFile: the name proposed, the choices answered as the picker left them") {
+        round.start(R"(printf 'file:///tmp/sea.txt\nchoice:enc=latin1\nchoice:stranger=1\n')");
+        portal::Options options;
+        options.emplace("current_name", sdbus::Variant{std::string{"notes.txt"}});
+        options.emplace(
+            "choices",
+            sdbus::Variant{std::vector<portal::Choice>{
+                {"enc", "Encoding", {{"utf8", "UTF-8"}, {"latin1", "Latin-1"}}, "utf8"}}});
+        const auto answer = round.call("SaveFile", kHandle, options);
+        REQUIRE(run_until(round.loop, [&] { return answer->arrived; }));
+        CHECK(answer->response == portal::kResponseOk);
+        CHECK(uris_of(answer->results) == std::vector<std::string>{"file:///tmp/sea.txt"});
+        const auto it = answer->results.find("choices");
+        REQUIRE(it != answer->results.end());
+        // Only the application's own ids come back.
+        CHECK(it->second.get<std::vector<portal::ChoiceOption>>() ==
+              std::vector<portal::ChoiceOption>{{"enc", "latin1"}});
+        CHECK(round.arguments() ==
+              "--pick\n--title\nOpen a Photo\n--save\n--name\nnotes.txt\n--choice\nenc\n"
+              "Encoding\nutf8\n--option\nutf8\nUTF-8\n--option\nlatin1\nLatin-1\n");
+    }
+    SUBCASE("SaveFiles: the names, saved into the folder chosen") {
+        round.start("printf 'file:///tmp/a.jpg\\nfile:///tmp/b.jpg\\n'");
+        portal::Options options;
+        options.emplace("files", sdbus::Variant{std::vector<std::vector<std::uint8_t>>{
+                                     bytes("a.jpg"), bytes("/elsewhere/b.jpg")}});
+        const auto answer = round.call("SaveFiles", kHandle, options);
+        REQUIRE(run_until(round.loop, [&] { return answer->arrived; }));
+        CHECK(answer->response == portal::kResponseOk);
+        CHECK(uris_of(answer->results).size() == 2);
+        CHECK(round.arguments() ==
+              "--pick\n--title\nOpen a Photo\n--save\n--file\na.jpg\n--file\nb.jpg\n");
     }
 }

@@ -4,6 +4,46 @@ Work log, newest first. Each entry: what was done, decisions, measurements, open
 
 ---
 
+## 2026-11-13 — Saving through the chooser (ROADMAP 4c)
+
+**Tested by the author** (2026-11-13, `~/.local`, Umbriel): `--save` with the stem selected,
+replace asked and answered both ways, Tab and the name lent by the cursor, New Folder, the
+choices (`choice:enc=latin1`, `choice:bom=true`), several files with one question; then zenity
+(`GDK_DEBUG=portals`) and Firefox's Ctrl+S through the portal started by hand, reported working.
+
+**Done**
+- `SaveFile` and `SaveFiles` are real: async like `OpenFile` (one `start()` for the three), the
+  picker saving. `save_file_request`: `current_name`, else `current_file`'s name, proposed (a
+  path in it keeps its last part: `../../etc/passwd` → `passwd`); `current_file`'s folder unless
+  `current_folder` says another. `save_files_request`: the names of `files` (`aay`, each cut to
+  its last part; empty, `.`, `..` left out). The application writes the files: we answer URIs.
+- `choices` (`a(ssa(ss)s)`) for the three methods, both ways: `--choice ID LABEL DEFAULT` with
+  `--option ID LABEL` after it to the picker, `choice:ID=VALUE` back, answered as `a(ss)` with
+  only the application's own ids.
+- `PickBar` rewritten: at the left the name field (`ui::TextField`, the stem selected so typing
+  keeps the extension, its own keyboard; Tab goes to the view and back; a click in the view
+  takes the keyboard there; Ctrl+V pastes the first line), then items (the filter, the choices:
+  a list "Encoding: UTF-8" or a checkbox) whose room comes first, the field giving way down to
+  120 px; at the right New Folder (saving only), Cancel, the application's word ("Save").
+- Saving in the Browser (`Pick::save`, `Pick::name`, `Pick::files`): Enter or Save puts the name
+  into the folder shown; a folder's name opens it; an existing name asks "Replace “a.jpg”?"
+  (`ConfirmDialog` takes a note line now: "The application writes its file over it."); empty,
+  `.`, `..` and `/` refused with a word; nothing saved in the trash. Enter on a file in the view
+  saves over it (after asking); a file the cursor moves to inside the same folder lends its
+  name (`follow_pick_cursor`, from draw; opening a folder never takes the name typed away).
+  `Pick::files`: folders only, the folder chosen as with `--folders`, one question for the
+  names already there ("Replace 2 files?").
+- `Browser::Picked` (paths, filter, choices) replaces 4b's two arguments; `set_pick_choice`.
+- `nordend --pick --save [--name NAME] [--file NAME]... [--choice …]`; windows titled "Save
+  File" / "Save Files". `nordend-snapshot --pick "save:NAME,filters…"`.
+- Tests (468): saving (stem, Enter, replace asked and answered both ways, a folder's name,
+  refused names), Tab and the name lent by the cursor, choices (unknown default unchecked,
+  list and checkbox, answered), several files (one question, a folder without them asks none);
+  the service's SaveFile/SaveFiles options and arguments, `choice:` lines, the answer keeping
+  only known ids. Nix build checked locally (sdbus-c++ 2.2) before pushing.
+
+---
+
 ## 2026-11-13 — Choosing files for real (ROADMAP 4b)
 
 **Tested by the author** (2026-11-13, `~/.local`, Umbriel): `--pick` with two filters on

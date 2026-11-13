@@ -64,8 +64,23 @@ fs::FileFilter file_filter(const Filter& filter) {
     return out;
 }
 
-PickRequest open_file_request(std::string title, std::string parent_window,
-                              const Options& options) {
+namespace {
+
+// A NUL-ended byte string ("ay"), as GLib writes paths; empty when absent or odd.
+std::string path_bytes(const Options& options, const char* name) {
+    const auto bytes = option<std::vector<std::uint8_t>>(options, name);
+    if (!bytes) {
+        return {};
+    }
+    std::string path(bytes->begin(), bytes->end());
+    while (!path.empty() && path.back() == '\0') {
+        path.pop_back();
+    }
+    return path.find('\0') == std::string::npos ? path : std::string{};
+}
+
+// What every method shares: the window, the button's word, filters, choices, the folder.
+PickRequest common_request(std::string title, std::string parent_window, const Options& options) {
     PickRequest request;
     request.title = std::move(title);
     if (parent_window.starts_with("wayland:")) {
@@ -84,16 +99,59 @@ PickRequest open_file_request(std::string title, std::string parent_window,
             request.filter = 0;
         }
     }
+    request.choices =
+        option<std::vector<Choice>>(options, "choices").value_or(std::vector<Choice>{});
+    if (const std::string folder = path_bytes(options, "current_folder"); folder.starts_with('/')) {
+        request.folder = folder;
+    }
+    return request;
+}
+
+// A name to save as: its last part, never "." or "..".
+std::string file_name(std::string_view path) {
+    const std::string_view name = path.substr(path.rfind('/') + 1);
+    return name == "." || name == ".." ? std::string{} : std::string{name};
+}
+
+}  // namespace
+
+PickRequest open_file_request(std::string title, std::string parent_window,
+                              const Options& options) {
+    PickRequest request = common_request(std::move(title), std::move(parent_window), options);
     request.multiple = option<bool>(options, "multiple").value_or(false);
     request.directory = option<bool>(options, "directory").value_or(false);
-    // A byte string ending with a NUL, as GLib writes paths.
-    if (const auto bytes = option<std::vector<std::uint8_t>>(options, "current_folder")) {
-        std::string path(bytes->begin(), bytes->end());
+    return request;
+}
+
+PickRequest save_file_request(std::string title, std::string parent_window,
+                              const Options& options) {
+    PickRequest request = common_request(std::move(title), std::move(parent_window), options);
+    request.save = true;
+    const std::string current = path_bytes(options, "current_file");
+    request.name = file_name(option<std::string>(options, "current_name").value_or(""));
+    if (request.name.empty()) {
+        request.name = file_name(current);
+    }
+    if (request.folder.empty() && current.starts_with('/')) {
+        request.folder = std::filesystem::path{current}.parent_path();
+    }
+    return request;
+}
+
+PickRequest save_files_request(std::string title, std::string parent_window,
+                               const Options& options) {
+    PickRequest request = common_request(std::move(title), std::move(parent_window), options);
+    request.save = true;
+    for (const std::vector<std::uint8_t>& bytes :
+         option<std::vector<std::vector<std::uint8_t>>>(options, "files")
+             .value_or(std::vector<std::vector<std::uint8_t>>{})) {
+        std::string path(bytes.begin(), bytes.end());
         while (!path.empty() && path.back() == '\0') {
             path.pop_back();
         }
-        if (!path.empty() && path.front() == '/' && path.find('\0') == std::string::npos) {
-            request.folder = path;
+        if (std::string name = file_name(path);
+            !name.empty() && name.find('\0') == std::string::npos) {
+            request.files.push_back(std::move(name));
         }
     }
     return request;
@@ -130,6 +188,21 @@ std::vector<std::string> picker_arguments(const PickRequest& request) {
         with("--current-filter", std::to_string(*request.filter));
     }
     with("--parent", request.parent_window);
+    if (request.save) {
+        arguments.emplace_back("--save");
+        with("--name", request.name);
+        for (const std::string& file : request.files) {
+            arguments.emplace_back("--file");
+            arguments.push_back(file);
+        }
+    }
+    for (const Choice& choice : request.choices) {
+        arguments.insert(arguments.end(),
+                         {"--choice", choice.get<0>(), choice.get<1>(), choice.get<3>()});
+        for (const ChoiceOption& option : choice.get<2>()) {
+            arguments.insert(arguments.end(), {"--option", option.get<0>(), option.get<1>()});
+        }
+    }
     if (!request.folder.empty()) {
         arguments.push_back(request.folder.string());
     }
@@ -151,6 +224,10 @@ PickResult pick_result(std::string_view output, int wait_status) {
             if (error == std::errc{} && last == number.data() + number.size()) {
                 result.filter = index;
             }
+        } else if (line.starts_with("choice:") && line.find('=') != std::string_view::npos) {
+            const std::string_view pair = line.substr(7);
+            const std::size_t equals = pair.find('=');
+            result.choices.emplace_back(pair.substr(0, equals), pair.substr(equals + 1));
         }
         output = end == std::string_view::npos ? std::string_view{} : output.substr(end + 1);
     }
@@ -162,6 +239,7 @@ PickResult pick_result(std::string_view output, int wait_status) {
     }
     result.uris.clear();
     result.filter.reset();
+    result.choices.clear();
     const bool closed = WIFSIGNALED(wait_status) && WTERMSIG(wait_status) == SIGTERM;
     result.response = (exited && code == 0) || closed ? kResponseCancelled : kResponseOther;
     return result;
@@ -329,7 +407,8 @@ struct FileChooser::Impl {
         Reply reply;
         std::unique_ptr<sdbus::IObject> request;  // Request.Close at the handle
         std::unique_ptr<Picker> picker;
-        std::vector<Filter> filters;  // as asked: current_filter is answered with one of them
+        std::vector<Filter> filters;       // as asked: current_filter is answered with one of them
+        std::vector<std::string> choices;  // their ids: only those are answered
     };
 
     core::EventLoop& loop;
@@ -373,13 +452,12 @@ struct FileChooser::Impl {
         idle_timer = 0;
     }
 
-    void open_file(Reply reply, const sdbus::ObjectPath& handle, const std::string& app_id,
-                   std::string parent_window, std::string title, const Options& options) {
-        PickRequest request =
-            open_file_request(std::move(title), std::move(parent_window), options);
-        log::info("portal: OpenFile for \"{}\"{}{}, {} filter(s){}", app_id.empty() ? "?" : app_id,
-                  request.multiple ? ", several" : "", request.directory ? ", folders" : "",
-                  request.filters.size(), request.parent_window.empty() ? "" : ", a parent");
+    void start(Reply reply, const sdbus::ObjectPath& handle, const std::string& app_id,
+               const char* method, const PickRequest& request) {
+        log::info("portal: {} for \"{}\"{}{}, {} filter(s), {} choice(s){}", method,
+                  app_id.empty() ? "?" : app_id, request.multiple ? ", several" : "",
+                  request.directory ? ", folders" : "", request.filters.size(),
+                  request.choices.size(), request.parent_window.empty() ? "" : ", a parent");
         if (pending.contains(handle)) {
             reply.returnResults(kResponseOther, Options{});
             return;
@@ -388,6 +466,9 @@ struct FileChooser::Impl {
         auto entry = std::make_unique<Pending>();
         entry->reply = std::move(reply);
         entry->filters = request.filters;
+        for (const Choice& choice : request.choices) {
+            entry->choices.push_back(choice.get<0>());
+        }
         const std::string& key = handle;
         try {
             entry->request = sdbus::createObject(connection, handle);
@@ -432,6 +513,15 @@ struct FileChooser::Impl {
             if (result.filter && *result.filter < done->filters.size()) {
                 results.emplace("current_filter", sdbus::Variant{done->filters.at(*result.filter)});
             }
+            std::vector<ChoiceOption> choices;
+            for (const auto& [id, value] : result.choices) {
+                if (std::ranges::find(done->choices, id) != done->choices.end()) {
+                    choices.emplace_back(id, value);
+                }
+            }
+            if (!choices.empty()) {
+                results.emplace("choices", sdbus::Variant{choices});
+            }
         }
         try {
             done->reply.returnResults(result.response, results);
@@ -443,12 +533,6 @@ struct FileChooser::Impl {
         loop.post([picker = std::shared_ptr<Picker>(std::move(done->picker))] {});
         bus.pump();
         rest();
-    }
-
-    std::tuple<std::uint32_t, Options> not_yet(const char* method) {
-        log::info("portal: {} is not there yet", method);
-        rest();
-        return {kResponseOther, Options{}};
     }
 };
 
@@ -465,23 +549,30 @@ FileChooser::FileChooser(core::EventLoop& loop, sdbus::IConnection& connection,
                 .implementedAs([&impl](Reply&& reply, const sdbus::ObjectPath& handle,
                                        const std::string& app_id, std::string parent_window,
                                        std::string title, const Options& options) {
-                    impl.open_file(std::move(reply), handle, app_id, std::move(parent_window),
-                                   std::move(title), options);
+                    impl.start(
+                        std::move(reply), handle, app_id, "OpenFile",
+                        open_file_request(std::move(title), std::move(parent_window), options));
                 }),
             sdbus::registerMethod("SaveFile")
                 .withInputParamNames("handle", "app_id", "parent_window", "title", "options")
                 .withOutputParamNames("response", "results")
-                .implementedAs(
-                    [&impl](const sdbus::ObjectPath& /*handle*/, const std::string& /*app_id*/,
-                            const std::string& /*parent_window*/, const std::string& /*title*/,
-                            const Options& /*options*/) { return impl.not_yet("SaveFile"); }),
+                .implementedAs([&impl](Reply&& reply, const sdbus::ObjectPath& handle,
+                                       const std::string& app_id, std::string parent_window,
+                                       std::string title, const Options& options) {
+                    impl.start(
+                        std::move(reply), handle, app_id, "SaveFile",
+                        save_file_request(std::move(title), std::move(parent_window), options));
+                }),
             sdbus::registerMethod("SaveFiles")
                 .withInputParamNames("handle", "app_id", "parent_window", "title", "options")
                 .withOutputParamNames("response", "results")
-                .implementedAs(
-                    [&impl](const sdbus::ObjectPath& /*handle*/, const std::string& /*app_id*/,
-                            const std::string& /*parent_window*/, const std::string& /*title*/,
-                            const Options& /*options*/) { return impl.not_yet("SaveFiles"); }))
+                .implementedAs([&impl](Reply&& reply, const sdbus::ObjectPath& handle,
+                                       const std::string& app_id, std::string parent_window,
+                                       std::string title, const Options& options) {
+                    impl.start(
+                        std::move(reply), handle, app_id, "SaveFiles",
+                        save_files_request(std::move(title), std::move(parent_window), options));
+                }))
         .forInterface(std::string{kFileChooser});
 }
 

@@ -336,7 +336,8 @@ int main(int argc, char** argv) {
             "usage: nordend-snapshot [--columns DIR [--reveal PATH] [--keys KEYS] [--thumbnails "
             "CACHE] [--sort FIELDS] [--info-expanded] [--info-width W] [--bench FRAMES] [--walk "
             "FRAMES] [--message TEXT] [--transfer TEXT] [--conflict NAME] [--drag NAME] "
-            "[--drop-over X,Y] [--band X1,Y1,X2,Y2] [--pick FILTERS|folders] [--fake-disks] "
+            "[--drop-over X,Y] [--band X1,Y1,X2,Y2] [--pick FILTERS|folders|save:NAME[,FILTERS]] "
+            "[--fake-disks] "
             "[--memory [--trim] "
             "[--default-malloc]]] [--csd STATE] [--desktop LOOK] [--gtk FILE] "
             "<out.ppm> "
@@ -526,6 +527,24 @@ int main(int argc, char** argv) {
                     views::Browser::Pick options;
                     options.folders = pick == "folders";
                     std::string_view rest{options.folders ? std::string_view{} : pick};
+                    // "save:NAME" or "save:NAME,filters…": saving, NAME proposed.
+                    if (rest.starts_with("save:")) {
+                        options.save = true;
+                        rest.remove_prefix(5);
+                        options.name = std::string{rest.substr(0, rest.find(','))};
+                        rest = options.name.size() == rest.size()
+                                   ? std::string_view{}
+                                   : rest.substr(options.name.size() + 1);
+                        options.choices.push_back(
+                            {.id = "encoding",
+                             .label = "Encoding",
+                             .options = {{"utf8", "UTF-8"}, {"latin1", "Latin-1"}},
+                             .selected = "utf8"});
+                        options.choices.push_back({.id = "bom",
+                                                   .label = "Add a BOM",
+                                                   .options = {},
+                                                   .selected = "false"});
+                    }
                     while (!rest.empty()) {
                         const std::string_view one = rest.substr(0, rest.find(','));
                         rest = one.size() == rest.size() ? std::string_view{}
@@ -545,10 +564,7 @@ int main(int argc, char** argv) {
                         options.filters.push_back(std::move(filter));
                     }
                     columns->set_pick(
-                        std::move(options),
-                        [](const std::vector<std::filesystem::path>& /*paths*/,
-                           std::optional<std::size_t> /*filter*/) {},
-                        [] {});
+                        std::move(options), [](const views::Browser::Picked& /*picked*/) {}, [] {});
                 }
                 if (reveal.empty()) {
                     columns->open(columns_dir);
