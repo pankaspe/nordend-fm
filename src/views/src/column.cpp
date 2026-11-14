@@ -18,8 +18,6 @@ constexpr float kIconX = 14.0F;
 constexpr float kIconGap = 10.0F;
 constexpr float kChevronSize = 14.0F;
 constexpr float kRightPadding = 12.0F;
-constexpr float kScrollbarWidth = 4.0F;
-constexpr float kScrollbarMinThumb = 24.0F;
 constexpr float kItemSlack = 8.0F;  // past the end of a name, still the entry (a press drags it)
 
 }  // namespace
@@ -153,16 +151,8 @@ void Column::draw(ui::Renderer& renderer, const ui::Rect& bounds, const theme::P
              .border = palette.primary});
     }
 
-    // Scrollbar: a thin thumb, only when there is something to scroll.
-    if (scroller_.max_offset() > 0.0F) {
-        const float thumb = std::max(kScrollbarMinThumb, bounds.height * bounds.height / content);
-        const float travel = bounds.height - thumb;
-        const float thumb_y = bounds.y + (travel * offset / scroller_.max_offset());
-        renderer.draw_box(
-            {bounds.right() - kScrollbarWidth - 2.0F, thumb_y, kScrollbarWidth, thumb},
-            {.fill = palette.on_surface_variant.with_alpha(0.45F),
-             .radius = ui::Corners::all(kScrollbarWidth / 2.0F)});
-    }
+    scroll_bar_.place(bounds, scroller_);
+    scroll_bar_.draw(renderer, palette);
     renderer.pop_clip();
 
     folder_->sniff(range.first, range.last);

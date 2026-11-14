@@ -23,6 +23,7 @@
 #include "nordend/ui/seat.hpp"
 #include "nordend/ui/texture.hpp"
 #include "nordend/views/folder.hpp"
+#include "nordend/views/scroll_bar.hpp"
 #include "nordend/views/text_selection.hpp"
 
 namespace nordend::views {
@@ -151,6 +152,8 @@ private:
     void drop(Slot& slot);
     void draw_image(ui::Renderer& renderer, const ui::Rect& area, const theme::Palette& palette,
                     ui::IconSet& icons, const fs::Entry& entry, Slot& slot, float fade);
+    // The scrollbars widen under the pointer.
+    void hover_bars(float x, float y);
     void draw_text(ui::Renderer& renderer, const ui::Rect& area, const theme::Palette& palette,
                    const fs::Entry& entry, const preview::Text& text, float fade,
                    Clock::time_point now);
@@ -172,6 +175,8 @@ private:
     std::unordered_map<std::string, Slot> slots_;  // the shown entry and its neighbours
     ui::Scroller text_scroller_;                   // the shown text page
     ui::Scroller text_sideways_;                   // its long lines, sideways
+    ScrollBar text_bar_{ScrollBar::Axis::vertical, 4.0F};
+    ScrollBar sideways_bar_{ScrollBar::Axis::horizontal, 4.0F};
     // The widest line of the text it was counted for, in characters.
     const preview::Text* widest_for_{nullptr};
     std::size_t widest_{0};

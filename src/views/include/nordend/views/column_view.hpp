@@ -26,6 +26,7 @@
 #include "nordend/views/edit_slot.hpp"
 #include "nordend/views/info_pane.hpp"
 #include "nordend/views/list_size.hpp"
+#include "nordend/views/scroll_bar.hpp"
 
 namespace nordend::views {
 
@@ -199,6 +200,11 @@ private:
     [[nodiscard]] std::optional<std::size_t> divider_at(float x, float y) const;
     void scroll(const ui::PointerEvent& event, Clock::time_point now);
     void update_hover();
+    // The scrollbars (the strip's, then the column's under the pointer): a left press taken,
+    // a drag followed, a drag ended; each returns true when it was a scrollbar's.
+    bool press_bar(float x, float y, Clock::time_point now);
+    bool drag_bar(float x, float y);
+    bool release_bar();
 
     core::EventLoop& loop_;
     core::WorkerPool& pool_;
@@ -225,9 +231,11 @@ private:
     std::size_t list_size_{kUsualListSize};
     float zoom_wheel_{0.0F};  // Ctrl+wheel notches not yet turned into a step
     std::function<void(std::size_t)> zoomed_;
-    ui::Scroller scroller_;     // horizontal
-    bool reveal_focus_{false};  // glide to show the focused column at the next draw
-    float shift_{0.0F};         // added to the offset at the next draw (a column prepended)
+    ui::Scroller scroller_;  // horizontal
+    ScrollBar scroll_bar_{ScrollBar::Axis::horizontal};
+    std::optional<std::size_t> bar_column_;  // the column whose scrollbar is dragged
+    bool reveal_focus_{false};               // glide to show the focused column at the next draw
+    float shift_{0.0F};  // added to the offset at the next draw (a column prepended)
 
     ui::Rect area_{};  // where the columns were last drawn
     float pointer_x_{0.0F};

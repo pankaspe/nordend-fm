@@ -17,6 +17,7 @@
 #include "nordend/views/edit_slot.hpp"
 #include "nordend/views/folder.hpp"
 #include "nordend/views/list_size.hpp"
+#include "nordend/views/scroll_bar.hpp"
 
 namespace nordend::views {
 
@@ -63,6 +64,10 @@ public:
 
     [[nodiscard]] const ui::Scroller& scroller() const noexcept { return scroller_; }
 
+    [[nodiscard]] ScrollBar& scroll_bar() noexcept { return scroll_bar_; }
+
+    [[nodiscard]] const ScrollBar& scroll_bar() const noexcept { return scroll_bar_; }
+
     // Row at a window point, from the last drawn bounds; nullopt outside the rows.
     [[nodiscard]] std::optional<std::size_t> row_at(float x, float y) const;
 
@@ -87,6 +92,7 @@ private:
 
     std::shared_ptr<Folder> folder_;
     ui::Scroller scroller_;
+    ScrollBar scroll_bar_{ScrollBar::Axis::vertical, 5.0F};  // clear of the divider's grab
     ui::Rect rows_area_{};  // where the rows were last drawn, for hit testing
     // Where the icon and name of each drawn row end (window x), from item_first_ on.
     std::vector<float> item_right_;

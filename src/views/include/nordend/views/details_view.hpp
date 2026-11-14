@@ -27,6 +27,7 @@
 #include "nordend/views/folder.hpp"
 #include "nordend/views/info_pane.hpp"
 #include "nordend/views/list_size.hpp"
+#include "nordend/views/scroll_bar.hpp"
 
 namespace nordend::views {
 
@@ -144,6 +145,8 @@ public:
 
     [[nodiscard]] ui::Scroller& scroller() noexcept { return scroller_; }
 
+    [[nodiscard]] const ScrollBar& scroll_bar() const noexcept { return scroll_bar_; }
+
     // A column's width in logical pixels (the name's as last laid out).
     [[nodiscard]] float width(Field field) const;
 
@@ -212,6 +215,7 @@ private:
     std::function<void(std::size_t)> zoomed_;
     ListSize size_{kListSizes[kUsualListSize]};
     ui::Scroller scroller_;
+    ScrollBar scroll_bar_{ScrollBar::Axis::vertical, 5.0F};  // clear of the info pane's edge
     // Widths of size, modified and type; the name takes the rest.
     std::array<float, 4> widths_{0.0F, 96.0F, 150.0F, 220.0F};
     Layout layout_;

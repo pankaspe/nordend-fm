@@ -42,8 +42,6 @@ constexpr float kPageColumns = 120.0F;  // characters a page is wide, at most
 constexpr float kAutoscrollPerPixel = 12.0F;
 constexpr float kAutoscrollMax = 4000.0F;
 constexpr float kPageRadius = 10.0F;
-constexpr float kScrollbarWidth = 4.0F;
-constexpr float kScrollbarMinThumb = 24.0F;
 
 // Where a shadow falls: a little below what casts it.
 ui::Rect shifted_down(ui::Rect rect) {
@@ -328,6 +326,11 @@ bool QuickLook::pointer(const ui::PointerEvent& event, Clock::time_point now) {
                 !layout_.page.contains(event.x, event.y)) {
                 return false;
             }
+            if (sideways_bar_.press(event.x, event.y, text_sideways_, now) ||
+                text_bar_.press(event.x, event.y, text_scroller_, now)) {
+                redraw_();
+                return true;  // a scrollbar's, not the selection's
+            }
             selection_.press(point_at(event.x, event.y, *text), event.click_count,
                              event.modifiers.shift, text->lines);
             selecting_ = true;
@@ -337,6 +340,12 @@ bool QuickLook::pointer(const ui::PointerEvent& event, Clock::time_point now) {
             redraw_();
             return true;
         case Kind::motion:
+            if (sideways_bar_.drag(event.x, event.y, text_sideways_) ||
+                text_bar_.drag(event.x, event.y, text_scroller_)) {
+                redraw_();
+                return false;
+            }
+            hover_bars(event.x, event.y);
             if (selecting_) {
                 pointer_x_ = event.x;
                 pointer_y_ = event.y;
@@ -348,13 +357,33 @@ bool QuickLook::pointer(const ui::PointerEvent& event, Clock::time_point now) {
         case Kind::release:
             if (event.button == ui::PointerButton::left) {
                 selecting_ = false;
+                if (sideways_bar_.release() || text_bar_.release()) {
+                    hover_bars(event.x, event.y);
+                    redraw_();
+                }
             }
             return false;
         case Kind::enter:
+            hover_bars(event.x, event.y);
+            return false;
         case Kind::leave:
+            sideways_bar_.release();
+            text_bar_.release();
+            hover_bars(-1.0F, -1.0F);  // nowhere
             return false;
     }
     return false;
+}
+
+void QuickLook::hover_bars(float x, float y) {
+    // Not while selecting: the bars stay as they are under a passing selection.
+    const bool sideways = !selecting_ && sideways_bar_.claims(x, y);
+    const bool down = !selecting_ && !sideways && text_bar_.claims(x, y);
+    bool changed = sideways_bar_.set_hovered(sideways_bar_.dragging() || sideways);
+    changed = text_bar_.set_hovered(text_bar_.dragging() || down) || changed;
+    if (changed) {
+        redraw_();
+    }
 }
 
 TextPoint QuickLook::point_at(float x, float y, const preview::Text& text) const {
@@ -690,24 +719,10 @@ void QuickLook::draw_text(ui::Renderer& renderer, const ui::Rect& area,
                                 mono);
     }
     renderer.pop_clip();
-    if (text_sideways_.max_offset() > 0.0F) {
-        const float content_width = static_cast<float>(widest_ + 1) * char_width;
-        const float thumb = std::max(kScrollbarMinThumb, text_room * text_room / content_width);
-        const float travel = text_room - thumb;
-        const float thumb_x = text_x + (travel * sideways / text_sideways_.max_offset());
-        renderer.draw_box({thumb_x, page.bottom() - kScrollbarWidth - 4.0F, thumb, kScrollbarWidth},
-                          {.fill = palette.on_surface_variant.with_alpha(0.45F * fade),
-                           .radius = ui::Corners::all(kScrollbarWidth / 2.0F)});
-    }
-    // Scrollbar: a thin thumb, only when there is something to scroll.
-    if (text_scroller_.max_offset() > 0.0F) {
-        const float thumb = std::max(kScrollbarMinThumb, inner.height * inner.height / content);
-        const float travel = inner.height - thumb;
-        const float thumb_y = inner.y + (travel * offset / text_scroller_.max_offset());
-        renderer.draw_box({page.right() - kScrollbarWidth - 4.0F, thumb_y, kScrollbarWidth, thumb},
-                          {.fill = palette.on_surface_variant.with_alpha(0.45F * fade),
-                           .radius = ui::Corners::all(kScrollbarWidth / 2.0F)});
-    }
+    sideways_bar_.place({text_x, page.y, text_room, page.height}, text_sideways_);
+    sideways_bar_.draw(renderer, palette, fade);
+    text_bar_.place({page.x, inner.y, page.width, inner.height}, text_scroller_);
+    text_bar_.draw(renderer, palette, fade);
 
     // name   C++   UTF-8   CRLF   3449 lines   120 kB
     std::string caption = entry.name;

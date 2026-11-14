@@ -4,6 +4,36 @@ Work log, newest first. Each entry: what was done, decisions, measurements, open
 
 ---
 
+## 2026-11-14 — Scrollbars to drag; the shortcuts card scrolls (#12)
+
+**Done**
+- `views::ScrollBar` (`scroll_bar.{hpp,cpp}`): one scrollbar for a `ui::Scroller` along one
+  axis, replacing the six copies of the drawing code (columns, the columns' strip, grid,
+  details, Quick Look's text both ways). 4 px at rest, 8 px under the pointer or while dragged
+  (and a stronger colour); the pointer finds it 14 px in from the edge. A press on the thumb
+  drags it, held where it was taken (`jump_to` at every motion); a press on the track glides so
+  the thumb's middle comes under the pointer, and the drag goes on from there.
+- The views offer a left press to their bars after their edges (a column's divider, the info
+  pane's edge) and before the entries; `hit()` says nothing over a bar, so the Browser starts no
+  rubber band and no file drag there; rows are not hovered under a bar. The bars of the columns
+  and the file views sit 5 px in from the edge, clear of the 4 px edge grabs.
+- The shortcuts card (#12, from llego): in a window too low for every group, the groups scroll
+  under the title with the wheel, the touchpad, Up/Down (66 px), Page Up/Down, Home/End and a
+  scrollbar; it opens at the top; a press on its scrollbar keeps it open, anywhere else still
+  closes it.
+- Tests (489): the bar's geometry, reach, widening, thumb and track drags, the horizontal axis;
+  the details' bar dragged through the Browser without selecting; the shortcuts card in a
+  400 px window by keys, wheel and scrollbar (offscreen).
+
+**Decisions**
+- The bar widens at once, without an animation: nothing new to keep drawing for.
+
+**Tested by the author** (2026-11-14): the bars widen and drag in columns, grid, details, the
+columns' strip and Quick Look's text both ways; a click on the track; the shortcuts card in a
+low window by wheel, keys and its bar; the dividers and the info pane's edge as before.
+
+---
+
 ## 2026-11-14 — Nordend 0.7.2
 
 **Done**

@@ -18,7 +18,6 @@ namespace nordend::views {
 namespace {
 
 constexpr float kDividerGrab = 4.0F;  // either side of a column edge
-constexpr float kScrollbarHeight = 4.0F;
 
 }  // namespace
 
@@ -369,6 +368,9 @@ std::optional<ViewHit> ColumnView::hit(float x, float y) const {
         return std::nullopt;
     }
     const Column& column = *columns_[*index].column;
+    if (scroll_bar_.claims(x, y) || column.scroll_bar().claims(x, y)) {
+        return std::nullopt;  // the scrollbar's, not an entry's
+    }
     const std::optional<std::size_t> row = column.row_at(x, y);
     return ViewHit{
         .folder = column.shared_folder(), .entry = row, .on_item = row && column.on_item(*row, x)};
@@ -421,14 +423,25 @@ std::optional<std::size_t> ColumnView::divider_at(float x, float y) const {
 void ColumnView::update_hover() {
     std::optional<std::size_t> column;
     std::optional<std::size_t> row;
+    bool on_bar = false;  // the horizontal one
+    bool on_column_bar = false;
     if (pointer_inside_ && !resizing_ && pointer_y_ >= area_.y && pointer_y_ < area_.bottom() &&
         !divider_at(pointer_x_, pointer_y_)) {
+        on_bar = scroll_bar_.claims(pointer_x_, pointer_y_);
         column = column_at(pointer_x_);
-        if (column) {
-            row = columns_[*column].column->row_at(pointer_x_, pointer_y_);
+        if (column && !on_bar) {
+            const Column& over = *columns_[*column].column;
+            on_column_bar = over.scroll_bar().claims(pointer_x_, pointer_y_);
+            if (!on_column_bar) {
+                row = over.row_at(pointer_x_, pointer_y_);
+            }
         }
     }
-    bool changed = false;
+    bool changed = scroll_bar_.set_hovered(scroll_bar_.dragging() || on_bar);
+    for (std::size_t i = 0; i < columns_.size(); ++i) {
+        ScrollBar& bar = columns_[i].column->scroll_bar();
+        changed = bar.set_hovered(bar.dragging() || (on_column_bar && column == i)) || changed;
+    }
     if (hovered_column_ && hovered_column_ != column && *hovered_column_ < columns_.size()) {
         changed = columns_[*hovered_column_].column->set_hovered(std::nullopt);
     }
@@ -495,15 +508,8 @@ void ColumnView::draw(ui::Renderer& renderer, const ui::Rect& bounds, const them
                          now);
     }
     // Horizontal scrollbar, only when the columns do not fit.
-    if (scroller_.max_offset() > 0.0F) {
-        const float content = content_width();
-        const float thumb = std::max(24.0F, area_.width * area_.width / content);
-        const float thumb_x = area_.x + ((area_.width - thumb) * offset / scroller_.max_offset());
-        renderer.draw_box(
-            {thumb_x, area_.bottom() - kScrollbarHeight - 2.0F, thumb, kScrollbarHeight},
-            {.fill = palette.on_surface_variant.with_alpha(0.45F),
-             .radius = ui::Corners::all(kScrollbarHeight / 2.0F)});
-    }
+    scroll_bar_.place(area_, scroller_);
+    scroll_bar_.draw(renderer, palette);
     renderer.pop_clip();
 
     update_hover();  // content may have moved under a still pointer
@@ -517,6 +523,10 @@ void ColumnView::pointer(const ui::PointerEvent& event, Clock::time_point now) {
             pointer_inside_ = true;
             pointer_x_ = event.x;
             pointer_y_ = event.y;
+            if (drag_bar(event.x, event.y)) {
+                redraw_();
+                break;
+            }
             if (resizing_) {
                 Slot& slot = columns_[*resizing_];
                 const float left = area_.x + slot.x - scroller_.offset();
@@ -536,6 +546,7 @@ void ColumnView::pointer(const ui::PointerEvent& event, Clock::time_point now) {
         }
         case Kind::leave:
             pointer_inside_ = false;
+            release_bar();
             if (over_divider_) {
                 over_divider_ = false;
                 set_cursor_(ui::CursorShape::standard);
@@ -584,6 +595,11 @@ void ColumnView::pointer(const ui::PointerEvent& event, Clock::time_point now) {
                 update_hover();
                 break;
             }
+            if (press_bar(event.x, event.y, now)) {
+                update_hover();
+                redraw_();
+                break;
+            }
             if (event.y < area_.y || event.y >= area_.bottom()) {
                 break;
             }
@@ -609,6 +625,11 @@ void ColumnView::pointer(const ui::PointerEvent& event, Clock::time_point now) {
             }
             break;
         case Kind::release:
+            if (event.button == ui::PointerButton::left && release_bar()) {
+                update_hover();
+                redraw_();
+                break;
+            }
             if (event.button == ui::PointerButton::left && resizing_) {
                 resizing_.reset();
                 reveal_focus_ = true;
@@ -621,6 +642,44 @@ void ColumnView::pointer(const ui::PointerEvent& event, Clock::time_point now) {
             }
             break;
     }
+}
+
+bool ColumnView::press_bar(float x, float y, Clock::time_point now) {
+    if (y < area_.y || y >= area_.bottom()) {
+        return false;
+    }
+    if (scroll_bar_.press(x, y, scroller_, now)) {
+        return true;  // over the columns' own: the strip's scrollbar first
+    }
+    if (const std::optional<std::size_t> index = column_at(x);
+        index && (info_area_.width <= 0.0F || x < info_area_.x)) {
+        Column& column = *columns_[*index].column;
+        if (column.scroll_bar().press(x, y, column.scroller(), now)) {
+            bar_column_ = index;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ColumnView::drag_bar(float x, float y) {
+    if (scroll_bar_.drag(x, y, scroller_)) {
+        return true;
+    }
+    if (bar_column_ && *bar_column_ < columns_.size()) {
+        Column& column = *columns_[*bar_column_].column;
+        return column.scroll_bar().drag(x, y, column.scroller());
+    }
+    return false;
+}
+
+bool ColumnView::release_bar() {
+    bool released = scroll_bar_.release();
+    if (bar_column_ && *bar_column_ < columns_.size()) {
+        released = columns_[*bar_column_].column->scroll_bar().release() || released;
+    }
+    bar_column_.reset();
+    return released;
 }
 
 void ColumnView::scroll(const ui::PointerEvent& event, Clock::time_point now) {

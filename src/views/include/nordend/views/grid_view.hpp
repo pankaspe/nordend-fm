@@ -25,6 +25,7 @@
 #include "nordend/views/folder.hpp"
 #include "nordend/views/grid_size.hpp"
 #include "nordend/views/info_pane.hpp"
+#include "nordend/views/scroll_bar.hpp"
 #include "nordend/views/thumbnails.hpp"
 
 namespace nordend::views {
@@ -189,6 +190,7 @@ private:
     fs::SortOrder order_;
     const DropMark* drop_{nullptr};
     ui::Scroller scroller_;
+    ScrollBar scroll_bar_{ScrollBar::Axis::vertical, 5.0F};  // clear of the info pane's edge
     std::size_t size_{kUsualGridSize};
     std::function<void(std::size_t)> zoomed_;
     std::size_t columns_{1};

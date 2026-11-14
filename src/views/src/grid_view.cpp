@@ -22,8 +22,6 @@ constexpr float kCellInset = 4.0F;       // highlight box inside the cell
 constexpr float kNameMargin = 8.0F;      // either side of the name
 constexpr float kCellMinWidth = 132.0F;  // and room for a short name (P1234567.ORF)
 constexpr float kThumbnailRadius = 4.0F;
-constexpr float kScrollbarWidth = 4.0F;
-constexpr float kScrollbarMinThumb = 24.0F;
 
 }  // namespace
 
@@ -64,6 +62,9 @@ void GridView::open(const std::filesystem::path& directory) {
 std::optional<ViewHit> GridView::hit(float x, float y) const {
     if (!folder_ || x < area_.x || x >= area_.right() || y < area_.y || y >= area_.bottom()) {
         return std::nullopt;
+    }
+    if (scroll_bar_.claims(x, y)) {
+        return std::nullopt;  // the scrollbar's, not an entry's
     }
     const std::optional<std::size_t> cell = cell_at(x, y);
     return ViewHit{.folder = folder_, .entry = cell, .on_item = cell && on_item(*cell, x, y)};
@@ -393,15 +394,8 @@ void GridView::draw(ui::Renderer& renderer, const ui::Rect& bounds, const theme:
                       palette.on_surface_variant);
     }
 
-    // Scrollbar: a thin thumb, only when there is something to scroll.
-    if (scroller_.max_offset() > 0.0F) {
-        const float thumb = std::max(kScrollbarMinThumb, area_.height * area_.height / content);
-        const float travel = area_.height - thumb;
-        const float thumb_y = area_.y + (travel * offset / scroller_.max_offset());
-        renderer.draw_box({area_.right() - kScrollbarWidth - 2.0F, thumb_y, kScrollbarWidth, thumb},
-                          {.fill = palette.on_surface_variant.with_alpha(0.45F),
-                           .radius = ui::Corners::all(kScrollbarWidth / 2.0F)});
-    }
+    scroll_bar_.place(area_, scroller_);
+    scroll_bar_.draw(renderer, palette);
     if (drop_ != nullptr && drop_->covers(folder_->path())) {
         renderer.draw_box({area_.x + 2.0F, area_.y + 2.0F, area_.width - 4.0F, area_.height - 4.0F},
                           {.fill = kTransparent,
@@ -450,8 +444,13 @@ bool GridView::on_pane_edge(float x, float y) const {
 }
 
 void GridView::update_hover() {
+    const bool on_bar =
+        !pane_drag_ && pointer_inside_ && scroll_bar_.claims(pointer_x_, pointer_y_);
+    if (scroll_bar_.set_hovered(scroll_bar_.dragging() || on_bar)) {
+        redraw_();
+    }
     const std::optional<std::size_t> cell =
-        pointer_inside_ && !pane_drag_ ? cell_at(pointer_x_, pointer_y_) : std::nullopt;
+        pointer_inside_ && !pane_drag_ && !on_bar ? cell_at(pointer_x_, pointer_y_) : std::nullopt;
     if (cell != hovered_) {
         hovered_ = cell;
         redraw_();
@@ -475,6 +474,10 @@ void GridView::pointer(const ui::PointerEvent& event, Clock::time_point now) {
             pointer_inside_ = true;
             pointer_x_ = event.x;
             pointer_y_ = event.y;
+            if (scroll_bar_.drag(event.x, event.y, scroller_)) {
+                redraw_();
+                break;
+            }
             if (pane_drag_ && info_pane_ != nullptr) {
                 // The edge follows the pointer; the cells per row change, the cursor's row stays.
                 const float width = pane_drag_->start_width + (pane_drag_->start_x - event.x);
@@ -485,6 +488,7 @@ void GridView::pointer(const ui::PointerEvent& event, Clock::time_point now) {
             break;
         case Kind::leave:
             pointer_inside_ = false;
+            scroll_bar_.release();
             update_hover();
             break;
         case Kind::scroll:
@@ -536,6 +540,11 @@ void GridView::pointer(const ui::PointerEvent& event, Clock::time_point now) {
                 update_hover();
                 break;
             }
+            if (scroll_bar_.press(event.x, event.y, scroller_, now)) {
+                update_hover();
+                redraw_();
+                break;
+            }
             if (event.x >= area_.right()) {
                 if (info_pane_ != nullptr) {
                     static_cast<void>(info_pane_->click(event.x, event.y));
@@ -560,6 +569,11 @@ void GridView::pointer(const ui::PointerEvent& event, Clock::time_point now) {
             break;
         }
         case Kind::release:
+            if (event.button == ui::PointerButton::left && scroll_bar_.release()) {
+                update_hover();
+                redraw_();
+                break;
+            }
             if (pane_drag_ && event.button == ui::PointerButton::left) {
                 pane_drag_.reset();
                 update_hover();

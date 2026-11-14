@@ -2271,7 +2271,7 @@ void Browser::draw(ui::Renderer& renderer, const ui::Rect& bounds, const theme::
         quick_look_.follow(current_folder());  // entries may have moved or gone meanwhile
     }
     quick_look_.draw(renderer, bounds, palette, icons, now);
-    shortcuts_.draw(renderer, bounds, palette);
+    shortcuts_.draw(renderer, bounds, palette, now);
     menu_.draw(renderer, bounds, palette);
     palette_.draw(renderer, bounds, palette);
     conflict_.draw(renderer, bounds, palette);  // last: over everything else
@@ -2309,7 +2309,7 @@ bool Browser::animating() const {
             view = pane().details.animating();
             break;
     }
-    return view || info_pane_.animating() || sidebar_.animating() ||
+    return view || info_pane_.animating() || sidebar_.animating() || shortcuts_.animating() ||
            quick_look_.animating(Clock::now());
 }
 
@@ -2461,8 +2461,9 @@ void Browser::take_pointer(const ui::PointerEvent& event, Clock::time_point now)
         return;  // the same for a bookmark's label
     }
     if (shortcuts_.is_open()) {
-        // A click anywhere closes the shortcuts; nothing under them reacts meanwhile.
-        if (event.kind == ui::PointerEvent::Kind::press) {
+        // A click anywhere but on their scrollbar closes the shortcuts; the wheel scrolls them;
+        // nothing under them reacts meanwhile.
+        if (!shortcuts_.pointer(event, now) && event.kind == ui::PointerEvent::Kind::press) {
             shortcuts_.close();
         }
         if (event.kind != ui::PointerEvent::Kind::leave) {
@@ -3548,6 +3549,8 @@ bool Browser::take_key(const ui::KeyEvent& event, Clock::time_point now) {
         if (command == Command::show_shortcuts ||
             (event.keysym == XKB_KEY_Escape && event.modifiers == ui::Modifiers{})) {
             shortcuts_.close();
+        } else {
+            shortcuts_.key(event, now);
         }
         return true;  // nothing under them reacts meanwhile
     }

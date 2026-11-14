@@ -52,6 +52,10 @@ README's [What's next](../README.md#whats-next).
 - **Natural scrolling.** On a touchpad the list follows the fingers 1:1, keeps gliding when they
   lift, slows down smoothly and stops softly at the ends. A mouse wheel glides instead of jumping,
   and quick turns add up. The arrows and Page Up/Down glide; Home and End jump.
+- **Scrollbars you can take:** a thin bar shows where you are in every list, in the columns'
+  strip and on a text page; near it the pointer finds it from 14 px away and it widens. Drag it
+  and the list follows, held where you took it; a click beside it on the track brings it there.
+  A press on a bar never selects or drags a file.
 - **Keyboard first:** arrows, Page Up/Down, Home and End; Enter, Right or Alt+Down to go in;
   Backspace, Left or Alt+Up to go back. The cursor lands on the folder you came from.
 - **History:** Alt+Left and Alt+Right, or the mouse's back and forward buttons, go through the
@@ -71,7 +75,8 @@ README's [What's next](../README.md#whats-next).
 - **The selection follows its files:** cursor and selection are kept by name, so they stay on a
   file that another program renames or that moves in the order.
 - **Every shortcut on one card:** F1 or "?" lists them all, from the same table the code runs on,
-  and a test checks that the card and the behaviour agree.
+  and a test checks that the card and the behaviour agree. In a window too low for them all, the
+  groups scroll under the title (wheel, touchpad, arrows, Page Up/Down, Home/End, its scrollbar).
 
 ## Photos first
 

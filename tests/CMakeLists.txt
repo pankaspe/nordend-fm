@@ -46,6 +46,7 @@ add_executable(nordend-tests
     quick_look_test.cpp
     rename_test.cpp
     renderer_runs_test.cpp
+    scroll_bar_test.cpp
     scroller_test.cpp
     shortcuts_test.cpp
     scale_test.cpp
