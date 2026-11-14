@@ -10,7 +10,7 @@
 
 set -u
 
-setup_version=0.7.2
+setup_version=0.7.3
 # NORDEND_SETUP_REPO names another repository (a local one, for testing a commit not pushed).
 repo_url=${NORDEND_SETUP_REPO:-https://github.com/pankaspe/nordend-fm.git}
 

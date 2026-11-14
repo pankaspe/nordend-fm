@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.2"><img src="https://img.shields.io/badge/release-v0.7.2-2a6a9e" alt="release v0.7.2"></a>
+  <a href="https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.3"><img src="https://img.shields.io/badge/release-v0.7.3-2a6a9e" alt="release v0.7.3"></a>
   <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white" alt="C++20">
   <img src="https://img.shields.io/badge/Wayland-native-FFBC00?logo=wayland&logoColor=black" alt="Wayland native">
-  <img src="https://img.shields.io/badge/tests-482%20%C2%B7%20ASan%20%C2%B7%20TSan-4B32C3" alt="482 tests, ASan, TSan">
+  <img src="https://img.shields.io/badge/tests-489%20%C2%B7%20ASan%20%C2%B7%20TSan-4B32C3" alt="489 tests, ASan, TSan">
   <a href="https://github.com/pankaspe/nordend-fm/actions/workflows/ci.yml"><img src="https://github.com/pankaspe/nordend-fm/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <img src="https://img.shields.io/badge/license-MIT-3DA639" alt="MIT license">
 </p>
@@ -24,13 +24,12 @@
 </p>
 
 > [!NOTE]
-> **Nordend 0.7.2**, the latest release: **nordend-setup**, one shell script that installs
-> Nordend on any distribution and keeps it current. It checks your system, shows the exact
-> command for what is missing, builds the latest release and installs it; later `check`,
-> `update`, `configure` (the file chooser and folders) and `uninstall`, which removes every file
-> it installed. Tried on Debian 13, Ubuntu 26.04, Fedora 43, Arch and openSUSE Tumbleweed, in CI
-> every week. Young software, used every day by its author. [Install it](#install) with
-> nordend-setup, as a package on Void Linux, or from its flake on NixOS or with Nix.
+> **Nordend 0.7.3**, the latest release: **scrollbars you can take**. Every list's scrollbar
+> widens under the pointer and can be dragged, or clicked beside to jump there, in the columns,
+> the grid, the details and Quick Look's text pages. The keyboard shortcuts card now scrolls
+> when the window is too low for it (issue #12, thanks to llego). Young software, used every day
+> by its author. [Install it](#install) with nordend-setup, as a package on Void Linux, or from
+> its flake on NixOS or with Nix.
 
 ## Contents
 
@@ -152,9 +151,9 @@ every shortcut.
 
 | | |
 |---|---|
-| Binary | **4.33 MB** (3.61 MB stripped), x86-64; the decoders and text readers in `nordend-preview`, 1.15 MB (1.03 stripped), a separate caged helper; the file chooser's service `nordend-portal`, 0.36 MB (0.29 stripped), started only when an application asks |
+| Binary | **4.34 MB** (3.61 MB stripped), x86-64; the decoders and text readers in `nordend-preview`, 1.15 MB (1.03 stripped), a separate caged helper; the file chooser's service `nordend-portal`, 0.36 MB (0.29 stripped), started only when an application asks |
 | Libraries | 17 direct (the helper and the service: 8 each); no GTK, no Qt, no GLib |
-| Code | about 56 400 lines of C++20, 20 300 of tests (482 test cases, under ASan and TSan too) |
+| Code | about 56 900 lines of C++20, 20 700 of tests (489 test cases, under ASan and TSan too) |
 | Memory | **24 MB** of its own at start; pictures are decoded in the helpers, which give their memory back after a quiet second |
 | Idle | **0 CPU**: nothing is drawn while nothing moves |
 
@@ -192,7 +191,7 @@ openSUSE Tumbleweed. Ubuntu 24.04 and Linux Mint 22 cannot build Nordend (their 
 Download it, read it, run it:
 
 ```sh
-curl -fLO https://raw.githubusercontent.com/pankaspe/nordend-fm/v0.7.2/scripts/nordend-setup
+curl -fLO https://raw.githubusercontent.com/pankaspe/nordend-fm/v0.7.3/scripts/nordend-setup
 less nordend-setup
 sh nordend-setup           # asks what to do; or: sh nordend-setup install
 ```
@@ -223,7 +222,7 @@ cp -r /tmp/nordend-fm/packaging/void/nordend srcpkgs/
 sudo xbps-install -R hostdir/binpkgs nordend
 ```
 
-The package is the latest release, **0.7.2**. What `main` gains after it comes with the next
+The package is the latest release, **0.7.3**. What `main` gains after it comes with the next
 release; to have it at once, build from source.
 
 </details>
@@ -365,6 +364,7 @@ settled.
 
 | Version | What it brought |
 |---|---|
+| [0.7.3](https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.3), 2026-11-14 | Scrollbars that widen under the pointer and can be dragged, or clicked on their track, in every list and on Quick Look's text pages; the keyboard shortcuts card scrolls in a low window, from llego's issue |
 | [0.7.2](https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.2), 2026-11-14 | nordend-setup: install Nordend from its source on any distribution (apt, dnf, pacman, zypper, xbps), with the build dependencies shown and installed, into `/usr/local` or `~/.local`; `check` and `update` to keep it current with the same choices, `configure` for the file chooser and folders, `status`, and `uninstall` removing every file it installed and giving the settings back; tried in CI on Debian 13, Ubuntu 26.04, Fedora 43, Arch and openSUSE Tumbleweed |
 | [0.7.1](https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.1), 2026-11-14 | Quick Look of a raw photo from 144 to 110 ms on screen (median about 102), and grid thumbnails made faster: the image scaler rewritten (twice as fast, the very same pixels), portrait photos made to fit the screen instead of 78 % larger; the sidebar's bookmarks renamed, pointed to another folder (Nordend's own folder chooser) and moved up or down, from their menu or with F2 and Alt+↑/↓, from Evergaster's issue |
 | [0.7.0](https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.0), 2026-11-14 | Nordend as the file chooser of other applications, through the desktop portal: open files or folders with its views, thumbnails and Quick Look, the application's filters and choices, saving with New Folder and a question before replacing, over the application's window on GNOME and Plasma; `nordend --set-file-chooser` and `--unset-file-chooser`; a small `nordend-portal` service that D-Bus starts when an application asks, one chooser window per request |
@@ -394,7 +394,7 @@ with nothing to set up and one header for the whole window; 0.6.1 rounded corner
 around it, square corners or a see-through background on request; 0.6.2 copying the folder's
 path and choosing the terminal; 0.7.0 Nordend as the file chooser of other applications;
 0.7.1 sharper photos sooner and bookmarks renamed and reordered; 0.7.2 nordend-setup, to
-install and update it on any distribution.
+install and update it on any distribution; 0.7.3 scrollbars you can drag.
 Coming, roughly in this order: **network shares** in the sidebar (Samba, SFTP, FTP, WebDAV,
 through gvfs when it runs); then **previews, one family at a time**: other common formats one by one (SVG, AVIF, fonts,
 archive contents, audio tags).

@@ -4,6 +4,18 @@ Work log, newest first. Each entry: what was done, decisions, measurements, open
 
 ---
 
+## 2026-11-14 — Nordend 0.7.3
+
+**Done**
+- Release 0.7.3: the draggable scrollbars and the scrolling shortcuts card (below), a patch
+  release as the fix of an issue.
+
+**Measured** (after rebuilding as 0.7.3): `nordend` 4.34 / 3.61 MiB stripped, `nordend-preview`
+1.15 / 1.03, `nordend-portal` 0.36 / 0.29; `readelf -d` NEEDED 17, 8 and 8; 56 900 + 20 700
+lines, 489 test cases.
+
+---
+
 ## 2026-11-14 — Scrollbars to drag; the shortcuts card scrolls (#12)
 
 **Done**

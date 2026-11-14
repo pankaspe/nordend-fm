@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(nordend VERSION 0.7.2 LANGUAGES C CXX)
+project(nordend VERSION 0.7.3 LANGUAGES C CXX)
 
 # ---------------------------------------------------------------------------
 # Global settings
