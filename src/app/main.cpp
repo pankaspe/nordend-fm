@@ -41,6 +41,7 @@
 #include "nordend/platform/desktop_entry.hpp"
 #include "nordend/platform/opener.hpp"
 #include "nordend/platform/portal.hpp"
+#include "nordend/platform/portal_config.hpp"
 #include "nordend/platform/udisks.hpp"
 #include "nordend/theme/app_icon.hpp"
 #include "nordend/theme/theme.hpp"
@@ -202,6 +203,7 @@ constexpr const char* kUsage =
     "       nordend --pick [--multiple] [--folders] [--title TEXT] [--accept-label TEXT]\n"
     "               [--filter LABEL [--glob PATTERN]... [--mime TYPE]...]... [--current-filter N]\n"
     "               [--parent wayland:HANDLE] [DIR]\n"
+    "       nordend --set-file-chooser | --unset-file-chooser\n"
     "  DIR             the folder to show (default: your home folder; with --pick, the last one)\n"
     "  --pick          choose a file (Enter, Ctrl+Enter) and print its file:// URI; Escape "
     "cancels\n"
@@ -221,7 +223,9 @@ constexpr const char* kUsage =
     "  --test-scene    show the renderer test scene instead of a folder\n"
     "  --check-config  report problems in the config file and exit (status 1 if any)\n"
     "  --version       print the version and exit\n"
-    "  --about         print what Nordend runs on, for a bug report, and exit\n";
+    "  --about         print what Nordend runs on, for a bug report, and exit\n"
+    "  --set-file-chooser    make Nordend the desktop's file chooser (your portals.conf) and exit\n"
+    "  --unset-file-chooser  give the file chooser back to the desktop and exit\n";
 
 // The folder to open: DIR as given (made absolute, ".." resolved), else $HOME, else "/".
 std::filesystem::path start_folder(const std::filesystem::path& given) {
@@ -239,6 +243,21 @@ std::filesystem::path start_folder(const std::filesystem::path& given) {
 bool client_decorations_forced() {
     const char* value = std::getenv("NORDEND_FORCE_CSD");  // NOLINT(concurrency-mt-unsafe): startup
     return value != nullptr && *value != '\0' && std::string_view{value} != "0";
+}
+
+// --set-file-chooser / --unset-file-chooser: what was done on stdout, a failure on stderr.
+int change_file_chooser(bool set) {
+    const platform::Environment environment = platform::Environment::from_environment();
+    const char* dir =
+        std::getenv("XDG_DESKTOP_PORTAL_DIR");  // NOLINT(concurrency-mt-unsafe): startup
+    const std::filesystem::path portal_dir = dir != nullptr && dir[0] == '/'
+                                                 ? std::filesystem::path{dir}
+                                                 : "/usr/share/xdg-desktop-portal/portals";
+    const platform::ChooserChange change = set ? platform::set_file_chooser(environment, portal_dir)
+                                               : platform::unset_file_chooser(environment);
+    std::fputs(change.ok ? change.message.c_str() : ("nordend: " + change.message).c_str(),
+               change.ok ? stdout : stderr);
+    return change.ok ? 0 : 1;
 }
 
 // --about: what Nordend runs on, one "Label: value" line each, to paste into a bug report.
@@ -426,6 +445,9 @@ int main(int argc, char** argv) {
         }
         if (arg == "--about") {
             return print_about();
+        }
+        if (arg == "--set-file-chooser" || arg == "--unset-file-chooser") {
+            return change_file_chooser(arg == "--set-file-chooser");
         }
         std::string pick_error;
         if (read_pick_option(argc, argv, i, pick_args, pick_error)) {

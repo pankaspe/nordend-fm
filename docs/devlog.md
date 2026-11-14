@@ -4,6 +4,55 @@ Work log, newest first. Each entry: what was done, decisions, measurements, open
 
 ---
 
+## 2026-11-14 — The chooser on GNOME and Plasma, and `--set-file-chooser` (ROADMAP 4, 4d)
+
+**Tested by the author** (2026-11-14, VM `nordend-void`, Nordend installed under `/usr`, the
+user's `<desktop>-portals.conf` naming it): on GNOME, zenity (one file; several with two filters
+and a starting folder), gnome-text-editor (the chooser over its window and staying there,
+Escape, Cancel, the editor killed under an open chooser closes it, Save and Save As over an
+existing file with the question), Firefox (Open File, Save Page, a site's upload button), kate
+through `QT_QPA_PLATFORMTHEME=xdgdesktopportal` (open, save); on Plasma, kate (Plasma's colours,
+the chooser over kate, Escape, replacing a file) and zenity's save. Then `--set-file-chooser` and
+`--unset-file-chooser` on the host against a scratch `XDG_CONFIG_HOME`: the desktop's file
+copied, "already", another chooser's line commented and brought back exactly, "not the file
+chooser", the warning about `nordend.portal`.
+
+**Measured / verified**
+- xdg-desktop-portal 1.22.1 (GNOME and Plasma, `--verbose`): a `<desktop>-portals.conf` in
+  `~/.config` does **not** replace the system one. The interfaces it names come from it
+  ("interface specific config"), every other one from the desktop's file ("default config").
+  The man page says nothing of it, and older versions (1.18 in Ubuntu 24.04) may read one file
+  only: so a new file starts as a copy of the desktop's.
+- xdg-desktop-portal looks for `.portal` files only in its datadir
+  (`/usr/share/xdg-desktop-portal/portals`) or `$XDG_DESKTOP_PORTAL_DIR` (strings of the
+  binary): an install in `~/.local` or `/usr/local` cannot be chosen.
+- Seen on the bus with `dbus-monitor`, the applications' own, not ours: Firefox proposes
+  `features.md.md` for a local `features.md`; zenity's save sends only `current_name` (no folder,
+  so the chooser opens where it was last); kate's filters include "Unknown" and "All Files "
+  with a trailing space.
+
+**Done**
+- `platform::portal_config`: `names_nordend`, `with_file_chooser` (our line first in
+  `[preferred]`, the group added when missing, another `FileChooser` line kept as a
+  `# Replaced by nordend --set-file-chooser:` comment), `without_file_chooser` (the exact
+  reverse); `set_file_chooser` edits the first of xdg-desktop-portal's names that exists in the
+  user's folder (each desktop of `XDG_CURRENT_DESKTOP`, then `portals.conf`), else writes
+  `<desktop>-portals.conf` from the system file it would read (`XDG_CONFIG_DIRS`, `/etc`,
+  `XDG_DATA_HOME`, `XDG_DATA_DIRS`, `/usr/share`) under a two-line header; warns when
+  `nordend.portal` is missing. `unset_file_chooser` removes a file it wrote that is still the
+  desktop's copy, else writes the rest back. Duplicate keys: the last counts, as GKeyFile reads.
+- `nordend --set-file-chooser` / `--unset-file-chooser` (exit 1 on a file that cannot be read
+  or written). README: "As the file chooser of other applications"; features: the chooser's
+  section.
+- Tests (476): the line added, replaced and brought back, the group added, only `[preferred]`'s
+  last line counting, the copy made and removed, a changed copy kept, the user's own
+  `portals.conf` edited in place and never removed, the warning.
+
+**Open**
+- Flatpak applications not tried (none in the VM). Older xdg-desktop-portal versions not tried.
+
+---
+
 ## 2026-11-13 — Saving through the chooser (ROADMAP 4c)
 
 **Tested by the author** (2026-11-13, `~/.local`, Umbriel): `--save` with the stem selected,

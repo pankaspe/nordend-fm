@@ -7,6 +7,7 @@ add_library(nordend_platform
     src/launcher.cpp
     src/opener.cpp
     src/portal.cpp
+    src/portal_config.cpp
     src/udisks.cpp
     src/volumes.cpp)
 add_library(nordend::platform ALIAS nordend_platform)

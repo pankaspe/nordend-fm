@@ -41,6 +41,7 @@ add_executable(nordend-tests
     platform_test.cpp
     bus_loop_test.cpp
     portal_service_test.cpp
+    portal_config_test.cpp
     preview_test.cpp
     quick_look_test.cpp
     rename_test.cpp

@@ -191,6 +191,9 @@ cmake --build build
 cmake --install build --prefix ~/.local --strip   # nordend, its desktop entry and icon
 ```
 
+To have Nordend as the file chooser of other applications (below), install it under `/usr`
+instead: `sudo cmake --install build --prefix /usr --strip`.
+
 ### Then
 
 Make it the default for folders (a browser's "Show in folder", `xdg-open`) and give it a key:
@@ -204,6 +207,24 @@ xdg-mime default nordend.desktop inode/directory
 "Mod+E" = { action = "spawn nordend", repeat = false }
 ```
 
+### As the file chooser of other applications
+
+Nordend can be the Open and Save dialog of other applications, through the desktop portal. It
+needs Nordend installed under `/usr` (the Void package is), because xdg-desktop-portal looks for
+its backends only there. Then choose it for your desktop, once:
+
+```sh
+nordend --set-file-chooser     # then log out and in again
+```
+
+It adds one line to your `~/.config/xdg-desktop-portal/<desktop>-portals.conf`, keeping the
+desktop's other portals; `nordend --unset-file-chooser` takes it out again. Flatpak applications
+use the portal by themselves; others only when asked:
+
+- Firefox: `widget.use-xdg-desktop-portal.file-picker` set to `1` in `about:config`
+- GTK 4 applications: `GDK_DEBUG=portals` in the session's environment (GTK 3: `GTK_USE_PORTAL=1`)
+- Qt applications: `QT_QPA_PLATFORMTHEME=xdgdesktopportal`
+
 ### Colours
 
 Nothing to set up: Nordend follows your theme by itself, as GTK apps such as Thunar do. It
@@ -215,8 +236,8 @@ portal offers them (GNOME, Plasma), else its own default palette.
 
 Configuration: every key, with its default, in [docs/config.example.toml](docs/config.example.toml)
 (copy it to `~/.config/nordend/config.toml`; `nordend --check-config` reports any problem). The
-command line: `nordend [DIR]`, `--config FILE`, `--version`, and `--about` (what Nordend runs on,
-for a bug report).
+command line: `nordend [DIR]`, `--config FILE`, `--version`, `--about` (what Nordend runs on,
+for a bug report), and `--set-file-chooser` / `--unset-file-chooser`.
 
 ## Versions
 

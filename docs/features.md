@@ -336,6 +336,36 @@ README's [What's next](../README.md#whats-next).
 - **Status bar:** item count, selection, free space on the disk (updated after a copy into the
   folder), the three view buttons and "?". Messages appear here for a few seconds.
 
+## The file chooser of other applications
+
+- **Nordend as the desktop's Open and Save dialog**, through xdg-desktop-portal's FileChooser:
+  Flatpak applications always ask the portal; Firefox, GTK and Qt applications when told to. A
+  small service, `nordend-portal` (in `libexec`), is started by D-Bus when an application asks,
+  opens one `nordend --pick` window for each request and leaves after 30 s with nothing to do:
+  no memory used while nobody is choosing, and a crash costs only that one window.
+- **Choosing:** the same views, sidebar, Quick Look and thumbnails as Nordend itself (the grid
+  the first time; its own `picker.toml` remembers the folder, view, tabs and size apart from the
+  main window). Enter or a double click chooses a file, the selection when the application takes
+  several; Ctrl+Enter or the application's button ("Open", "Select") chooses; Escape or Cancel
+  cancels. Only folders, when the application asks for a folder.
+- **Filters** the application offers, in a list at the bottom: patterns without case, MIME types
+  with their subtypes, `image/*`; told by the name alone, as a GTK chooser does. The status bar
+  counts what they leave out.
+- **Saving:** a name field with the proposed name, its stem selected so typing keeps the
+  extension; New Folder; a question before replacing a file; several files saved into one folder
+  with one question. The application's own choices (an encoding list, a checkbox) sit in the bar.
+- **Over the application's window:** xdg-foreign and xdg-dialog keep the chooser over it, modal
+  (GNOME, Plasma); on a compositor without them (Umbriel) it is a window of its own. Closing the
+  application closes the chooser.
+- **`nordend --set-file-chooser`** makes Nordend the chooser of the current desktop: one line in
+  your `~/.config/xdg-desktop-portal/<desktop>-portals.conf`, where xdg-desktop-portal looks
+  first (a new file starts as a copy of the desktop's own, so its other portals stay as they
+  were). `--unset-file-chooser` takes it out again and brings back the line it replaced; a file
+  it wrote and nobody changed is removed. xdg-desktop-portal reads the change at the next login,
+  and finds Nordend only when it is installed under `/usr` (as the package is): the command warns
+  otherwise.
+- Tried with zenity, gnome-text-editor, Firefox and kate, on Umbriel, GNOME and Plasma.
+
 ## Always current
 
 - **Live folders:** files created, removed, changed or renamed by any program show up at once
@@ -452,7 +482,8 @@ go back to the system.
 
 freedesktop thumbnails, shared-mime-info, MIME applications associations, Desktop Entry, XDG
 base and user directories, GTK bookmarks; Wayland xdg-shell, xdg-decoration, fractional-scale,
-viewporter, cursor-shape and xdg-activation.
+viewporter, cursor-shape, xdg-activation, xdg-foreign and xdg-dialog; xdg-desktop-portal's
+FileChooser and portals.conf.
 
 ## Next
 
@@ -464,8 +495,8 @@ sorting by type for names with several types), 0.5.0 (text previews with syntax 
 copying, logs from their end; the helper became the first engine), 0.4.0 (image previews read by Nordend's own code in caged
 helpers: DNG, TIFF, raw previews and EXIF without exiv2), 0.3.1 (more raw previews), 0.3.0 (the
 command palette, finding files, the icon in the accent), 0.2.0 (Sort By, tabs, zoom in the
-lists) and the first release, 0.1.0. Under way: Nordend as the file chooser of other
-applications through xdg-desktop-portal (the service and `nordend --pick` are in; choosing
-folders, filters and saving come next). Then, roughly in this order: other common formats, colour labels and ratings, a Quick Look for photographers, a
+lists) and the first release, 0.1.0. Done on `main`, for 0.7.0: Nordend as the file
+chooser of other applications through xdg-desktop-portal (opening, folders, filters, saving,
+`nordend --set-file-chooser`), tried on Umbriel, GNOME and Plasma. Then, roughly in this order: other common formats, colour labels and ratings, a Quick Look for photographers, a
 dual pane. See the README's
 [What's next](../README.md#whats-next).
