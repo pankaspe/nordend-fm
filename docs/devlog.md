@@ -4,6 +4,38 @@ Work log, newest first. Each entry: what was done, decisions, measurements, open
 
 ---
 
+## 2026-11-14 — Building on other distributions (toward nordend-setup, ROADMAP 4¼)
+
+**Measured** (a CI workflow on the `distro-check` branch: each distribution's own packages,
+Release build without tests, `nordend --version`)
+
+| Distribution | Compiler | sdbus-c++ | wayland-protocols | Result |
+|---|---|---|---|---|
+| Debian 13 | GCC 14.2 | 2.1.0 | 1.44 | builds |
+| Ubuntu 26.04 LTS | GCC 15.2 | 2.2.1 | 1.47 | builds |
+| Fedora 43 | GCC 15.3 | 2.1.0 | 1.49 | builds |
+| Arch | GCC 16.2 | 2.3.1 | 1.50 | builds |
+| openSUSE Tumbleweed | GCC 16.2 | 2.3.1 | 1.50 | builds |
+| Ubuntu 24.04 LTS | GCC 13.3 | 1.4.0 | 1.45 | no: sdbus-c++ 1.x |
+
+No compiler warning on any of them. Nordend needs GCC 13 (`std::format`) and sdbus-c++ 2.1;
+Ubuntu 24.04 (and Mint 22) is left out (the author's call): nordend-setup will say so.
+Packages: by name with apt and pacman; by pkg-config name (`'pkgconfig(egl)'`) with dnf and
+zypper, plus `Mesa-libGLESv3-devel` on openSUSE (its `glesv2` brings no GLES 3 headers).
+
+**Fixed** (found by those builds)
+- `wl_pointer_listener` has a `warp` member only from libwayland 1.25 (Debian 13 and Ubuntu
+  26.04 have 1.23 and 1.24): set only when the header knows it. We bind `wl_seat` v8, so the
+  event (v11) is never sent.
+- Landlock's ABI 5 and 6 (`LANDLOCK_ACCESS_FS_IOCTL_DEV`, the `scoped` field) are only in kernel
+  headers from 6.10 and 6.12 (Ubuntu 24.04 has 6.8's): the ruleset and those rights are now
+  Nordend's own, with the kernel's ABI values, checked against the headers wherever they have
+  them. A first try also checked the struct's size: newer headers (Fedora 43, Arch, openSUSE)
+  make it 48 bytes, so that check broke their builds; a kernel takes a shorter struct, so only
+  the fields' offsets are checked now. Which rights a kernel takes is still asked at run time.
+
+---
+
 ## 2026-11-14 — Nordend 0.7.1
 
 A patch release: Quick Look of an ORF from 144 to 110 ms on screen (median about 102) (the scaler rewritten,

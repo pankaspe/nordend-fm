@@ -51,6 +51,31 @@ namespace {
 
 // 4 GiB of address space: a 200 MP picture (the decoders' limit) is 800 MB of pixels, plus the
 // file and the decoders' buffers.
+// Landlock's ruleset and its newer rights as the kernel's ABI fixes them, so that Nordend builds
+// against older kernel headers too (Ubuntu 24.04 has 6.8's, before ABI 5 and 6); which of them a
+// kernel takes is asked at run time (its ABI version).
+struct RulesetAttr {
+    std::uint64_t handled_access_fs{0};
+    std::uint64_t handled_access_net{0};  // ABI 4
+    std::uint64_t scoped{0};              // ABI 6
+};
+
+constexpr std::uint64_t kAccessFsIoctlDev = std::uint64_t{1} << 15U;        // ABI 5
+constexpr std::uint64_t kScopeAbstractUnixSocket = std::uint64_t{1} << 0U;  // ABI 6
+constexpr std::uint64_t kScopeSignal = std::uint64_t{1} << 1U;              // ABI 6
+#ifdef LANDLOCK_ACCESS_FS_IOCTL_DEV
+static_assert(kAccessFsIoctlDev == LANDLOCK_ACCESS_FS_IOCTL_DEV);
+#endif
+#ifdef LANDLOCK_SCOPE_SIGNAL
+static_assert(kScopeAbstractUnixSocket == LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET);
+static_assert(kScopeSignal == LANDLOCK_SCOPE_SIGNAL);
+// The same place for each field; newer headers' struct goes on past scoped (48 bytes in Fedora
+// 43's, Arch's), and a kernel takes a shorter one: only the fields Nordend fills must line up.
+static_assert(offsetof(RulesetAttr, handled_access_net) ==
+              offsetof(landlock_ruleset_attr, handled_access_net));
+static_assert(offsetof(RulesetAttr, scoped) == offsetof(landlock_ruleset_attr, scoped));
+#endif
+
 constexpr rlim_t kAddressSpace = rlim_t{4} << 30;
 constexpr rlim_t kFiles = 32;
 
@@ -198,7 +223,7 @@ int restrict_file_system_and_network() {
     if (abi < 1) {
         return 0;
     }
-    landlock_ruleset_attr attr{};
+    RulesetAttr attr{};
     attr.handled_access_fs =
         LANDLOCK_ACCESS_FS_EXECUTE | LANDLOCK_ACCESS_FS_WRITE_FILE | LANDLOCK_ACCESS_FS_READ_FILE |
         LANDLOCK_ACCESS_FS_READ_DIR | LANDLOCK_ACCESS_FS_REMOVE_DIR |
@@ -215,17 +240,17 @@ int restrict_file_system_and_network() {
         attr.handled_access_net = LANDLOCK_ACCESS_NET_BIND_TCP | LANDLOCK_ACCESS_NET_CONNECT_TCP;
     }
     if (abi >= 5) {
-        attr.handled_access_fs |= LANDLOCK_ACCESS_FS_IOCTL_DEV;
+        attr.handled_access_fs |= kAccessFsIoctlDev;
     }
     if (abi >= 6) {
-        attr.scoped = LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET | LANDLOCK_SCOPE_SIGNAL;
+        attr.scoped = kScopeAbstractUnixSocket | kScopeSignal;
     }
     // The size the running kernel knows for its ABI: older kernels refuse fields they lack.
     std::size_t size = sizeof(attr);
     if (abi < 4) {
-        size = offsetof(landlock_ruleset_attr, handled_access_net);
+        size = offsetof(RulesetAttr, handled_access_net);
     } else if (abi < 6) {
-        size = offsetof(landlock_ruleset_attr, scoped);
+        size = offsetof(RulesetAttr, scoped);
     }
     const long ruleset = ::syscall(__NR_landlock_create_ruleset, &attr, size, 0);
     if (ruleset < 0) {
