@@ -371,6 +371,33 @@ README's [What's next](../README.md#whats-next).
   otherwise.
 - Tried with zenity, gnome-text-editor, Firefox and kate, on Umbriel, GNOME and Plasma.
 
+## Installing and updating
+
+- **nordend-setup**, one POSIX shell script for distributions without a Nordend package:
+  `install`, `update`, `check`, `configure`, `status`, `uninstall`; without a command it shows
+  the state and asks what to do. Read before running ("download, read, run", no `curl | sh`);
+  every command is shown before it runs, `--dry-run` only shows them, `--yes` answers for you.
+  Colours from the terminal's own palette, none with `NO_COLOR` or off a terminal.
+- **The system:** the distribution from os-release (derivatives by `ID_LIKE`), its package
+  manager (apt, dnf, pacman, zypper, xbps), the compiler (GCC 13+), CMake, Ninja, Git and the 17
+  libraries with sdbus-c++ 2.1+; what is missing is installed with the exact command shown, after
+  one question for sudo. Releases known too old (Ubuntu before 26.04 and its derivatives, Debian
+  before 13) are told so; NixOS is pointed to the flake.
+- **Installing:** the newest release's tag, cloned over HTTPS (`git clone --depth 1`), built in
+  the cache and installed into `/usr/local` (or `~/.local`, or `--prefix`); `nordend.portal`
+  copied to `/usr/share` for the file chooser, on request. A Nordend from a package is left to
+  its package manager: the script stops. A record beside the install keeps the version, the
+  commit and every file installed.
+- **Updating:** `check` asks GitHub for the newest release's tag (nothing else; Nordend itself
+  never goes online), `update` builds it with the same choices and removes the files the new
+  version no longer has. The script runs from a copy of itself, so it can replace itself.
+- **Settings:** `configure` makes Nordend the file chooser (`nordend --set-file-chooser`) and
+  the folder opener (`xdg-mime`, remembering the one before) or gives them back, and says where
+  to set a key for it; `uninstall` gives them back before removing the files.
+- Tried in CI (`.github/workflows/setup.yml`, weekly too) on Debian 13, Ubuntu 26.04, Fedora 43,
+  Arch and openSUSE Tumbleweed, from a bare container to installed, updated and removed; by hand
+  on Void with GNOME and Plasma.
+
 ## Always current
 
 - **Live folders:** files created, removed, changed or renamed by any program show up at once

@@ -1,0 +1,1237 @@
+#!/bin/sh
+# nordend-setup: install, update and configure Nordend from its source code, on distributions
+# without a Nordend package. https://github.com/pankaspe/nordend-fm
+#
+# Read it before you run it: it is one plain POSIX sh file. It shows every command before
+# running it, asks before each one that needs sudo, and --dry-run prints them without running
+# anything. Nordend itself never goes online: only this script does, and only when you run it.
+#
+# shellcheck shell=sh
+
+set -u
+
+setup_version=0.7.2
+# NORDEND_SETUP_REPO names another repository (a local one, for testing a commit not pushed).
+repo_url=${NORDEND_SETUP_REPO:-https://github.com/pankaspe/nordend-fm.git}
+
+# What Nordend needs to build (CMakeLists.txt; minimums found building on each distribution).
+min_gcc=13
+min_clang=21 # the clang Nordend is built with; older ones are not tried
+min_cmake=3.20
+min_sdbus=2.1
+pkg_modules='wayland-client wayland-egl wayland-cursor wayland-scanner wayland-protocols egl
+glesv2 xkbcommon harfbuzz freetype2 fontconfig tomlplusplus libwebp libwebpdemux libjxl zlib
+sdbus-c++'
+
+# Each package manager's package names for the tools and libraries above.
+packages_apt='g++ cmake ninja-build pkg-config git ca-certificates libwayland-dev
+wayland-protocols libegl-dev libgles-dev libxkbcommon-dev libharfbuzz-dev libfreetype-dev
+libfontconfig-dev libtomlplusplus-dev libwebp-dev libjxl-dev zlib1g-dev libsdbus-c++-dev'
+packages_dnf='gcc-c++ cmake ninja-build pkgconf-pkg-config git wayland-devel
+wayland-protocols-devel libglvnd-devel libxkbcommon-devel harfbuzz-devel freetype-devel
+fontconfig-devel tomlplusplus-devel libwebp-devel libjxl-devel zlib-ng-compat-devel
+sdbus-cpp-devel'
+packages_pacman='gcc cmake ninja pkgconf git wayland wayland-protocols libglvnd libxkbcommon
+harfbuzz freetype2 fontconfig tomlplusplus libwebp libjxl zlib sdbus-cpp'
+packages_zypper="gcc-c++ cmake ninja pkgconf git pkgconfig(wayland-client)
+pkgconfig(wayland-egl) pkgconfig(wayland-cursor) pkgconfig(wayland-protocols) pkgconfig(egl)
+pkgconfig(glesv2) pkgconfig(xkbcommon) pkgconfig(harfbuzz) pkgconfig(freetype2)
+pkgconfig(fontconfig) pkgconfig(tomlplusplus) pkgconfig(libwebp) pkgconfig(libwebpdemux)
+pkgconfig(libjxl) pkgconfig(zlib) pkgconfig(sdbus-c++) Mesa-libGLESv3-devel"
+packages_xbps='gcc cmake ninja pkgconf git wayland-devel wayland-protocols libglvnd-devel
+libxkbcommon-devel harfbuzz-devel freetype-devel fontconfig-devel tomlplusplus-devel
+libwebp-devel libjxl-devel zlib-devel sdbus-c++-devel'
+
+# ---------------------------------------------------------------------------------------------
+# Output: colours only on a terminal, never with NO_COLOR (no-color.org) or --no-color; the
+# terminal's own red, green and yellow, which its theme keeps readable on light and dark.
+# ---------------------------------------------------------------------------------------------
+
+assume_yes=0
+dry_run=0
+use_color=1
+opt_prefix=''
+opt_ref=''
+
+setup_output() {
+    if [ "$use_color" = 1 ] && [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; then
+        esc=$(printf '\033')
+        c_bold="${esc}[1m" c_red="${esc}[31m" c_green="${esc}[32m" c_yellow="${esc}[33m"
+        c_off="${esc}[0m"
+    else
+        c_bold='' c_red='' c_green='' c_yellow='' c_off=''
+    fi
+    case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
+    *UTF-8* | *utf-8* | *UTF8* | *utf8*) s_ok='✓' s_warn='!' s_fail='✗' s_run='→' ;;
+    *) s_ok='+' s_warn='!' s_fail='x' s_run='->' ;;
+    esac
+}
+
+say() { printf '%s\n' "$*"; }
+heading() { printf '\n%s%s%s\n' "$c_bold" "$*" "$c_off"; }
+ok() { printf '  %s%s%s %s\n' "$c_green" "$s_ok" "$c_off" "$*"; }
+warn() { printf '  %s%s%s %s\n' "$c_yellow" "$s_warn" "$c_off" "$*"; }
+bad() { printf '  %s%s%s %s\n' "$c_red" "$s_fail" "$c_off" "$*"; }
+note() { printf '    %s\n' "$*"; }
+die() {
+    printf '%s%s%s %s\n' "$c_red" "$s_fail" "$c_off" "$*" >&2
+    exit 1
+}
+
+# A path as the user knows it: ~ for the home folder.
+pretty_path() {
+    case "$1" in
+    "$HOME"/*) printf '~%s' "${1#"$HOME"}" ;;
+    *) printf '%s' "$1" ;;
+    esac
+}
+
+# ---------------------------------------------------------------------------------------------
+# Questions. They need a terminal; --yes answers yes to every one (and takes each menu's first
+# choice, the recommended one).
+# ---------------------------------------------------------------------------------------------
+
+# ask QUESTION [n]: 0 for yes. Enter alone means yes, or no with "n" (a question whose
+# recommended answer is no). --yes and a dry run take the recommended answer by themselves.
+ask() {
+    if [ "${2:-y}" = n ]; then
+        hint='[y/N]' recommended=no
+    else
+        hint='[Y/n]' recommended=yes
+    fi
+    if [ "$assume_yes" = 1 ] || [ "$dry_run" = 1 ]; then
+        printf '%s %s %s (%s)\n' "$1" "$hint" "$recommended" "$([ "$dry_run" = 1 ] && echo dry run || echo --yes)"
+        [ "$recommended" = yes ]
+        return
+    fi
+    [ -t 0 ] || die "A question needs a terminal: run in one, or answer yes to all with --yes."
+    while :; do
+        printf '%s%s%s %s ' "$c_bold" "$1" "$c_off" "$hint"
+        IFS= read -r answer || die "No answer: stopped."
+        case "$answer" in
+        '') [ "$recommended" = yes ] && return 0 || return 1 ;;
+        [yY] | [yY][eE][sS]) return 0 ;;
+        [nN] | [nN][oO]) return 1 ;;
+        *) say "Please answer y or n." ;;
+        esac
+    done
+}
+
+# choose PROMPT CHOICE...: sets $choice to the number picked (1 = the first, the recommended).
+choose() {
+    prompt=$1
+    shift
+    count=$#
+    number=1
+    for item in "$@"; do
+        printf '  %s%d%s  %s\n' "$c_bold" "$number" "$c_off" "$item"
+        number=$((number + 1))
+    done
+    if [ "$assume_yes" = 1 ]; then
+        printf '%s [1] 1 (--yes)\n' "$prompt"
+        choice=1
+        return
+    fi
+    [ -t 0 ] || die "A question needs a terminal: run in one, or answer yes to all with --yes."
+    while :; do
+        printf '%s%s%s [1] ' "$c_bold" "$prompt" "$c_off"
+        IFS= read -r answer || die "No answer: stopped."
+        [ -n "$answer" ] || answer=1
+        case "$answer" in
+        *[!0-9]*) ;;
+        *)
+            if [ "$answer" -ge 1 ] && [ "$answer" -le "$count" ]; then
+                choice=$answer
+                return
+            fi
+            ;;
+        esac
+        say "Please type a number from 1 to $count."
+    done
+}
+
+# ---------------------------------------------------------------------------------------------
+# Running commands: each one shown first; --dry-run only shows it.
+# ---------------------------------------------------------------------------------------------
+
+# How the user's commands get root: nothing as root, else sudo, else doas; 1 when neither.
+root_prefix() {
+    if [ "$(id -u)" = 0 ]; then
+        printf ''
+    elif command -v sudo >/dev/null 2>&1; then
+        printf 'sudo'
+    elif command -v doas >/dev/null 2>&1; then
+        printf 'doas'
+    else
+        return 1
+    fi
+}
+
+show_command() { printf '  %s%s%s %s\n' "$c_bold" "$s_run" "$c_off" "$*"; }
+
+# run COMMAND ARG...: runs it as the user.
+run() {
+    show_command "$@"
+    [ "$dry_run" = 1 ] && return 0
+    "$@"
+}
+
+# run_root COMMAND ARG...: runs it through sudo (or doas). The first one of a run asks; the
+# later ones are shown as they run.
+root_agreed=0
+run_root() {
+    root_command=$(root_prefix) ||
+        die "Neither sudo nor doas is installed: run the command above as root, then run nordend-setup again."
+    if [ -n "$root_command" ]; then
+        show_command "$root_command" "$@"
+        [ "$dry_run" = 1 ] && return 0
+        if [ "$root_agreed" = 0 ]; then
+            ask "Run it, and the next commands that need it, with $root_command?" || return 1
+            root_agreed=1
+        fi
+        "$root_command" "$@"
+    else
+        run "$@"
+    fi
+}
+
+# 0 when FOLDER, or the nearest folder above it that exists, is writable without root.
+writable() {
+    w_dir=$1
+    while [ ! -e "$w_dir" ]; do
+        w_dir=$(dirname "$w_dir")
+    done
+    [ -w "$w_dir" ]
+}
+
+# as_needed FOLDER COMMAND ARG...: runs it as the user when FOLDER is theirs, else as root.
+as_needed() {
+    n_dir=$1
+    shift
+    if writable "$n_dir"; then
+        run "$@"
+    else
+        run_root "$@"
+    fi
+}
+
+# ---------------------------------------------------------------------------------------------
+# The system: distribution, package manager, tools and libraries.
+# ---------------------------------------------------------------------------------------------
+
+# A field of os-release, read without running the file.
+os_field() {
+    sed -n "s/^$1=//p" "$os_release" | head -n 1 | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"
+}
+
+# Sets os_name, os_id, os_version, package_manager (apt, dnf, pacman, zypper, xbps, nix or
+# empty), and unsupported (why this release cannot build Nordend, or empty).
+# NORDEND_SETUP_OS_RELEASE names another os-release file, for trying other distributions.
+detect_system() {
+    os_release=${NORDEND_SETUP_OS_RELEASE:-/etc/os-release}
+    [ -r "$os_release" ] || os_release=/usr/lib/os-release
+    os_name='an unknown system' os_id='' os_like='' os_version='' ubuntu_codename=''
+    if [ -r "$os_release" ]; then
+        os_name=$(os_field PRETTY_NAME)
+        os_id=$(os_field ID)
+        os_like=$(os_field ID_LIKE)
+        os_version=$(os_field VERSION_ID)
+        ubuntu_codename=$(os_field UBUNTU_CODENAME)
+        [ -n "$os_name" ] || os_name=$(os_field NAME)
+        [ -n "$os_name" ] || os_name=${os_id:-'an unknown system'}
+    fi
+
+    package_manager=''
+    for word in $os_id $os_like; do
+        case "$word" in
+        debian | ubuntu) package_manager=apt ;;
+        fedora | rhel | centos) package_manager=dnf ;;
+        arch) package_manager=pacman ;;
+        opensuse* | suse | sles) package_manager=zypper ;;
+        void) package_manager=xbps ;;
+        nixos) package_manager=nix ;;
+        esac
+        [ -n "$package_manager" ] && break
+    done
+
+    # Releases known to be too old: no GCC 13 or no sdbus-c++ 2.1 in their packages.
+    unsupported=''
+    case "$os_id" in
+    ubuntu)
+        case "$os_version" in
+        2[0-5].*) unsupported="Ubuntu $os_version has sdbus-c++ 1.x; Nordend needs $min_sdbus or newer." ;;
+        esac
+        ;;
+    debian)
+        case "$os_version" in
+        [0-9] | 1[0-2]) unsupported="Debian $os_version has a GCC older than $min_gcc, the oldest that builds Nordend." ;;
+        esac
+        ;;
+    *)
+        case "$ubuntu_codename" in
+        focal | jammy | noble) unsupported="$os_name is built on Ubuntu $ubuntu_codename, whose sdbus-c++ is 1.x; Nordend needs $min_sdbus or newer." ;;
+        esac
+        ;;
+    esac
+}
+
+# version_at_least HAVE WANT: 0 when HAVE >= WANT, comparing dotted numbers.
+version_at_least() {
+    awk -v have="$1" -v want="$2" 'BEGIN {
+        n = split(have, h, "."); m = split(want, w, "."); if (m > n) n = m
+        for (i = 1; i <= n; i++) {
+            if (h[i] + 0 > w[i] + 0) exit 0
+            if (h[i] + 0 < w[i] + 0) exit 1
+        }
+        exit 0
+    }'
+}
+
+# The package manager's command and packages that install everything Nordend needs to build,
+# as words (no package name holds a space or a glob character; the first word is the program).
+# pacman with -Syu: Arch updates the whole system with its packages, never only some.
+install_words() {
+    case "$package_manager" in
+    apt) printf 'apt-get install --no-install-recommends %s' "$packages_apt" ;;
+    dnf) printf 'dnf install %s' "$packages_dnf" ;;
+    pacman) printf 'pacman -Syu --needed %s' "$packages_pacman" ;;
+    zypper) printf 'zypper install %s' "$packages_zypper" ;;
+    xbps) printf 'xbps-install -S %s' "$packages_xbps" ;;
+    esac
+}
+
+# The same as one line to paste into a shell: zypper's pkgconfig(...) names quoted.
+install_line() {
+    install_words | tr '\n' ' ' | tr -s ' ' | sed -e 's/ $//' -e "s/\(pkgconfig([^)]*)\)/'\1'/g"
+}
+
+# Checks the tools and libraries, one line each. Sets missing=1 when something is missing or
+# too old, compiler_ok=1 when a C++ compiler fits.
+check_build_tools() {
+    missing=0
+
+    cxx=${CXX:-}
+    if [ -z "$cxx" ]; then
+        for candidate in c++ g++ clang++; do
+            if command -v "$candidate" >/dev/null 2>&1; then
+                cxx=$candidate
+                break
+            fi
+        done
+    fi
+    if [ -z "$cxx" ] || ! command -v "$cxx" >/dev/null 2>&1; then
+        bad "C++ compiler: none found (GCC $min_gcc or newer)"
+        missing=1
+    else
+        cxx_version=$("$cxx" -dumpfullversion -dumpversion 2>/dev/null | head -n 1)
+        if "$cxx" --version 2>/dev/null | head -n 1 | grep -qi clang; then
+            if version_at_least "$cxx_version" "$min_clang"; then
+                ok "C++ compiler: clang $cxx_version"
+            else
+                warn "C++ compiler: clang $cxx_version (Nordend is tried with GCC $min_gcc+ and clang $min_clang+; this one may work)"
+            fi
+        elif version_at_least "$cxx_version" "$min_gcc"; then
+            ok "C++ compiler: GCC $cxx_version"
+        else
+            bad "C++ compiler: GCC $cxx_version is too old (GCC $min_gcc or newer)"
+            missing=1
+        fi
+    fi
+
+    if command -v cmake >/dev/null 2>&1; then
+        cmake_version=$(cmake --version | head -n 1 | awk '{ print $3 }')
+        if version_at_least "$cmake_version" "$min_cmake"; then
+            ok "CMake $cmake_version"
+        else
+            bad "CMake $cmake_version is too old ($min_cmake or newer)"
+            missing=1
+        fi
+    else
+        bad "CMake: not installed"
+        missing=1
+    fi
+
+    ninja=''
+    for candidate in ninja ninja-build samu; do
+        if command -v "$candidate" >/dev/null 2>&1; then
+            ninja=$candidate
+            break
+        fi
+    done
+    if [ -n "$ninja" ]; then
+        ok "Ninja $("$ninja" --version)"
+    else
+        bad "Ninja: not installed"
+        missing=1
+    fi
+
+    if command -v git >/dev/null 2>&1; then
+        ok "Git $(git --version | awk '{ print $3 }')"
+    else
+        bad "Git: not installed"
+        missing=1
+    fi
+
+    if ! command -v pkg-config >/dev/null 2>&1; then
+        bad "pkg-config: not installed (it finds the libraries)"
+        missing=1
+        return
+    fi
+    absent=''
+    modules=0
+    for module in $pkg_modules; do
+        modules=$((modules + 1))
+        pkg-config --exists "$module" 2>/dev/null || absent="$absent $module"
+    done
+    if [ -n "$absent" ]; then
+        bad "Libraries not found:$absent"
+        missing=1
+    else
+        ok "Libraries: all $modules found (sdbus-c++ $(pkg-config --modversion sdbus-c++))"
+    fi
+    case " $absent " in
+    *' sdbus-c++ '*) ;;
+    *)
+        sdbus_version=$(pkg-config --modversion sdbus-c++)
+        if ! version_at_least "$sdbus_version" "$min_sdbus"; then
+            bad "sdbus-c++ $sdbus_version is too old ($min_sdbus or newer)"
+            missing=1
+        fi
+        ;;
+    esac
+}
+
+# ---------------------------------------------------------------------------------------------
+# Nordend as installed now.
+# ---------------------------------------------------------------------------------------------
+
+# Every nordend on PATH, in PATH's order, one per line, by its real path: a file reached again
+# through a linked folder (/bin → /usr/bin) only once.
+nordends_on_path() {
+    old_ifs=$IFS
+    IFS=:
+    seen=''
+    for dir in $PATH; do
+        [ -n "$dir" ] && [ -x "$dir/nordend" ] && [ ! -d "$dir/nordend" ] || continue
+        real=$(readlink -f "$dir/nordend" 2>/dev/null || printf '%s' "$dir/nordend")
+        case "$seen" in
+        *":$real:"*) continue ;;
+        esac
+        seen="$seen:$real:"
+        printf '%s\n' "$real"
+    done
+    IFS=$old_ifs
+}
+
+# Who installed FILE: "the package NAME", "Nix", "nordend-setup" or "hand".
+installed_by() {
+    real=$(readlink -f "$1" 2>/dev/null || printf '%s' "$1")
+    case "$real" in
+    /nix/store/*)
+        printf 'Nix'
+        return
+        ;;
+    esac
+    # Every package database present is asked, not only the distribution's own.
+    owner=''
+    if command -v xbps-query >/dev/null 2>&1; then
+        owner=$(xbps-query -o "$real" 2>/dev/null | head -n 1 | sed 's/: .*//')
+    fi
+    if [ -z "$owner" ] && command -v pacman >/dev/null 2>&1; then
+        owner=$(pacman -Qqo "$real" 2>/dev/null) || owner=''
+    fi
+    if [ -z "$owner" ] && command -v dpkg >/dev/null 2>&1; then
+        owner=$(dpkg -S "$real" 2>/dev/null | head -n 1 | sed 's/: .*//')
+    fi
+    if [ -z "$owner" ] && command -v rpm >/dev/null 2>&1; then
+        owner=$(rpm -qf "$real" 2>/dev/null) || owner=''
+    fi
+    if [ -n "$owner" ]; then
+        printf 'the package %s' "$owner"
+    elif [ -r "${real%/bin/nordend}/share/nordend/install-record" ]; then
+        printf 'nordend-setup'
+    else
+        printf 'hand'
+    fi
+}
+
+status_nordend() {
+    heading "Nordend"
+    found=$(nordends_on_path)
+    if [ -z "$found" ]; then
+        warn "Not installed (no nordend on your PATH)"
+        return
+    fi
+    first=1
+    first_version=''
+    while IFS= read -r binary; do
+        version=$("$binary" --version 2>/dev/null | awk '{ print $2 }')
+        [ -n "$version" ] || version='(its version did not answer)'
+        by=$(installed_by "$binary")
+        case "$by" in
+        hand) by='installed by hand' ;;
+        *) by="installed by $by" ;;
+        esac
+        if [ "$first" = 1 ]; then
+            ok "$version in $(pretty_path "$binary") ($by)"
+            first_version=$version
+            first=0
+        elif [ "$version" = "$first_version" ]; then
+            note "also $version in $(pretty_path "$binary") ($by), not used: the first on PATH wins"
+        else
+            warn "also $version in $(pretty_path "$binary") ($by): a different version; the file chooser may start either one"
+        fi
+    done <<EOF
+$found
+EOF
+
+    # xdg-desktop-portal reads the .portal files in /usr/share only.
+    portal_file=''
+    [ -r /usr/share/xdg-desktop-portal/portals/nordend.portal ] &&
+        portal_file=/usr/share/xdg-desktop-portal/portals/nordend.portal
+    conf_dir=${XDG_CONFIG_HOME:-$HOME/.config}/xdg-desktop-portal
+    named_in=''
+    for conf in "$conf_dir"/*portals.conf; do
+        [ -r "$conf" ] && grep -q '^[[:space:]]*org\.freedesktop\.impl\.portal\.FileChooser[[:space:]]*=[[:space:]]*nordend' "$conf" &&
+            named_in="$named_in $(pretty_path "$conf")"
+    done
+    if [ -n "$named_in" ] && [ -n "$portal_file" ]; then
+        ok "File chooser: Nordend, named in$named_in"
+    elif [ -n "$named_in" ]; then
+        warn "File chooser: named in$named_in, but no nordend.portal in /usr/share/xdg-desktop-portal/portals"
+    elif [ -n "$portal_file" ]; then
+        note "File chooser: the desktop's own (nordend --set-file-chooser makes it Nordend)"
+    else
+        note "File chooser: the desktop's own"
+    fi
+
+    if command -v xdg-mime >/dev/null 2>&1; then
+        folders=$(xdg-mime query default inode/directory 2>/dev/null)
+        case "$folders" in
+        nordend.desktop) ok "Folders open with Nordend" ;;
+        '') note "Folders open with: nothing set" ;;
+        *) note "Folders open with: $folders" ;;
+        esac
+    fi
+}
+
+status_system() {
+    heading "System"
+    case "$package_manager" in
+    '') warn "$os_name: nordend-setup does not know its packages" ;;
+    nix) ok "$os_name (Nix)" ;;
+    *) ok "$os_name ($package_manager)" ;;
+    esac
+    if [ -n "$unsupported" ]; then
+        bad "$unsupported"
+        case "$os_id" in
+        ubuntu) note "Ubuntu 26.04 LTS builds Nordend." ;;
+        debian) note "Debian 13 builds Nordend." ;;
+        esac
+        return
+    fi
+    if [ "$package_manager" = nix ]; then
+        note "On NixOS, Nordend comes from its flake: see the README's NixOS section."
+        return
+    fi
+    check_build_tools
+    if [ "$missing" = 1 ]; then
+        if [ -n "$package_manager" ]; then
+            note "To install what Nordend needs to build:"
+            show_command "$(root_prefix_quiet)$(install_line)"
+        else
+            note "Install them with your package manager; the libraries by their pkg-config names above."
+        fi
+    fi
+}
+
+# Like root_prefix, for showing a command: never stops.
+root_prefix_quiet() {
+    if [ "$(id -u)" = 0 ]; then
+        printf ''
+    elif command -v sudo >/dev/null 2>&1 || ! command -v doas >/dev/null 2>&1; then
+        printf 'sudo '
+    else
+        printf 'doas '
+    fi
+}
+
+# Installs the build dependencies with the package manager, asking first; with --yes, the
+# package manager does not ask again.
+install_packages() {
+    pm_yes=''
+    case "$package_manager" in
+    apt)
+        run_root apt-get update || return 1
+        pm_yes=-y
+        ;;
+    dnf | xbps) pm_yes=-y ;;
+    pacman) pm_yes=--noconfirm ;;
+    zypper) pm_yes=--non-interactive ;;
+    *) return 1 ;;
+    esac
+    set -f
+    # shellcheck disable=SC2046 # one word per package name, none with a space or a glob
+    set -- $(install_words)
+    set +f
+    if [ "$assume_yes" = 1 ]; then
+        program=$1
+        shift
+        set -- "$program" "$pm_yes" "$@"
+        [ "$package_manager" != apt ] || set -- env DEBIAN_FRONTEND=noninteractive "$@"
+    fi
+    run_root "$@"
+}
+
+# ---------------------------------------------------------------------------------------------
+# Installs made by nordend-setup: the release's source cloned and built in the cache, installed
+# into a prefix with CMake, and a record of what was installed:
+#   PREFIX/share/nordend/install-record    version, ref, commit, prefix, portal file, date
+#   PREFIX/share/nordend/installed-files   every file installed, the two records included
+# ---------------------------------------------------------------------------------------------
+
+oldest_release=0.7.2 # the first release nordend-setup can install
+portal_dir=/usr/share/xdg-desktop-portal/portals
+
+cache_dir() { printf '%s/nordend-setup' "${XDG_CACHE_HOME:-$HOME/.cache}"; }
+
+# The newest release's version (X.Y.Z), from the repository's tags: empty when it has none;
+# 1 when the repository cannot be reached.
+latest_release() {
+    tags=$(git ls-remote --tags --refs "$repo_url" 'v*' 2>/dev/null) || return 1
+    printf '%s\n' "$tags" |
+        sed -n 's|.*refs/tags/v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)$|\1|p' |
+        sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1
+}
+
+# record_field RECORD KEY: a value of an install record, read without running the file.
+record_field() { sed -n "s/^$2=//p" "$1" | head -n 1; }
+
+# The prefixes holding an install made by nordend-setup, one per line: --prefix's alone when
+# given, else /usr/local, ~/.local and the prefix of every nordend on PATH.
+setup_prefixes() {
+    if [ -n "$opt_prefix" ]; then
+        [ -r "$opt_prefix/share/nordend/install-record" ] && printf '%s\n' "$opt_prefix"
+        return 0
+    fi
+    {
+        printf '%s\n' /usr/local "$HOME/.local"
+        nordends_on_path | sed 's|/bin/nordend$||'
+    } | awk '!seen[$0]++' | while IFS= read -r candidate; do
+        [ -r "$candidate/share/nordend/install-record" ] && printf '%s\n' "$candidate"
+    done
+    return 0
+}
+
+# Sets prefix to one of setup_prefixes (asking when there are several); 1 when none.
+pick_setup_prefix() {
+    prefixes=$(setup_prefixes)
+    [ -n "$prefixes" ] || return 1
+    count=$(printf '%s\n' "$prefixes" | wc -l)
+    if [ "$count" = 1 ]; then
+        prefix=$prefixes
+        return 0
+    fi
+    say "nordend-setup installed Nordend in more than one place:"
+    set --
+    while IFS= read -r candidate; do
+        set -- "$@" "$candidate ($(record_field "$candidate/share/nordend/install-record" version))"
+    done <<EOF
+$prefixes
+EOF
+    choose "Which one?" "$@"
+    prefix=$(printf '%s\n' "$prefixes" | sed -n "${choice}p")
+}
+
+# The prefix for a new install: --prefix, else the user's choice.
+choose_prefix() {
+    if [ -n "$opt_prefix" ]; then
+        prefix=$opt_prefix
+    else
+        heading "Where"
+        choose "Install Nordend where?" \
+            "/usr/local, for every user (sudo asked for the install)" \
+            "$(pretty_path "$HOME/.local"), for you only (sudo only for the file chooser's file)"
+        case "$choice" in
+        1) prefix=/usr/local ;;
+        2) prefix=$HOME/.local ;;
+        esac
+    fi
+}
+
+# Every file nordend-setup may remove from an install in PREFIX, one per line: the ones its
+# list names under PREFIX, and the portal file its record names; anything else is left alone.
+removable_files() {
+    r_prefix=$1
+    r_portal=$(record_field "$r_prefix/share/nordend/install-record" portal)
+    while IFS= read -r file; do
+        case "$file" in
+        '' | *'/../'* | *'/./'*) continue ;;
+        "$r_prefix"/*) ;;
+        "$portal_dir/nordend.portal") [ "$file" = "$r_portal" ] || continue ;;
+        *) continue ;;
+        esac
+        { [ -e "$file" ] || [ -L "$file" ]; } && printf '%s\n' "$file"
+    done <"$r_prefix/share/nordend/installed-files"
+    return 0
+}
+
+# A failed step: what to do about it.
+failed() {
+    die "$1 failed (its output is above). Nothing was installed; run nordend-setup install again once it is fixed."
+}
+
+# Sets latest to the newest release's version, or stops with the reason: unreachable, no
+# release, or (unless "any" is given) older than the first release nordend-setup installs.
+newest_release() {
+    command -v git >/dev/null 2>&1 || die "Git is not installed: it asks $repo_url for the newest release."
+    show_command git ls-remote --tags --refs "$repo_url" "'v*'"
+    latest=$(latest_release) || die "Could not reach $repo_url to find the newest release: is the network up?"
+    [ -n "$latest" ] || die "$repo_url has no release (no tag vX.Y.Z)."
+    [ "${1:-}" = any ] || version_at_least "$latest" "$oldest_release" ||
+        die "The newest release is $latest; nordend-setup installs $oldest_release and newer. To try the work in progress: --ref main."
+}
+
+command_check() {
+    say "${c_bold}nordend-setup check${c_off}: is a newer Nordend out?"
+    heading "Installed"
+    if pick_setup_prefix; then
+        installed=$(record_field "$prefix/share/nordend/install-record" version)
+        ok "Nordend $installed in $(pretty_path "$prefix")"
+    else
+        installed=$(nordends_on_path | head -n 1)
+        [ -z "$installed" ] || installed=$("$installed" --version 2>/dev/null | awk '{ print $2 }')
+        if [ -n "$installed" ]; then
+            ok "Nordend $installed (not installed by nordend-setup)"
+        else
+            note "Nordend is not installed"
+        fi
+    fi
+    heading "Newest release"
+    newest_release any
+    if [ -z "$installed" ]; then
+        ok "Nordend $latest: nordend-setup install"
+    elif [ "$installed" = "$latest" ]; then
+        ok "Nordend $latest: up to date"
+    elif version_at_least "$installed" "$latest"; then
+        ok "Nordend $latest: the installed $installed is newer"
+    else
+        ok "Nordend $latest is out: nordend-setup update"
+        note "What changed: https://github.com/pankaspe/nordend-fm/releases/tag/v$latest"
+    fi
+}
+
+# install and update: mode is "install" or "update".
+command_install() {
+    mode=${1:-install}
+    detect_system
+    if [ "$mode" = update ]; then
+        say "${c_bold}nordend-setup update${c_off}: build the newest Nordend and install it in place of the one there."
+        pick_setup_prefix ||
+            die "No Nordend installed by nordend-setup was found (looked in /usr/local, ~/.local and PATH; --prefix DIR for another place): nordend-setup install."
+        record=$prefix/share/nordend/install-record
+        installed=$(record_field "$record" version)
+        heading "Installed"
+        ok "Nordend $installed in $(pretty_path "$prefix") (commit $(record_field "$record" commit))"
+    else
+        say "${c_bold}nordend-setup install${c_off}: build Nordend from its source and install it."
+    fi
+    status_system
+    [ -z "$unsupported" ] || die "Nordend cannot be built here."
+    [ "$package_manager" != nix ] || die "On NixOS, install Nordend from its flake."
+    if [ "$missing" = 1 ]; then
+        [ -n "$package_manager" ] ||
+            die "Install what is missing with your package manager, then run nordend-setup install again."
+        heading "Packages"
+        say "Nordend needs these packages to build."
+        install_packages || die "The packages were not installed: nothing else was done."
+        if [ "$dry_run" = 0 ]; then
+            heading "System, again"
+            check_build_tools
+            [ "$missing" = 0 ] || die "Something is still missing (above): nothing else was done."
+        fi
+    fi
+
+    # A Nordend from a package stays the package manager's: two copies would fight over the
+    # file chooser and the folders.
+    found=$(nordends_on_path)
+    while IFS= read -r binary; do
+        [ -n "$binary" ] || continue
+        by=$(installed_by "$binary")
+        case "$by" in
+        'the package '* | Nix)
+            die "Nordend is installed by $by ($(pretty_path "$binary")): update it with your package manager, or remove it first."
+            ;;
+        esac
+    done <<EOF
+$found
+EOF
+
+    heading "Version"
+    latest=''
+    if [ -n "$opt_ref" ]; then
+        ref=$opt_ref
+        ok "$ref (asked with --ref)"
+    else
+        newest_release
+        ref=v$latest
+        ok "Nordend $latest, the newest release"
+    fi
+    if [ "$mode" = update ] && [ -n "$latest" ]; then
+        if [ "$installed" = "$latest" ]; then
+            ok "Nordend $latest is installed already: nothing to do."
+            return 0
+        elif version_at_least "$installed" "$latest"; then
+            ok "The installed $installed is newer than the newest release: nothing to do."
+            return 0
+        fi
+    fi
+
+    [ "$mode" = update ] || choose_prefix
+    prefix=${prefix%/}
+    # A literal ~ given to --prefix (as in --prefix=~/.local), expanded here.
+    # shellcheck disable=SC2088
+    case "$prefix" in
+    '~') prefix=$HOME ;;
+    '~/'*) prefix=$HOME/${prefix#'~/'} ;;
+    esac
+    case "$prefix" in
+    /*) ;;
+    *) die "The prefix must be an absolute path: $prefix" ;;
+    esac
+    case "$prefix" in
+    /usr | /) die "$prefix belongs to your package manager: install into /usr/local or ~/.local." ;;
+    esac
+    record=$prefix/share/nordend/install-record
+    if [ -z "$opt_ref" ] && [ -r "$record" ] && [ "$(record_field "$record" version)" = "$latest" ]; then
+        ok "Nordend $latest is already installed in $(pretty_path "$prefix"): nothing to do."
+        return 0
+    fi
+    # What an earlier install left here, to take out what the new one no longer has.
+    old_files=''
+    old_portal=''
+    if [ -r "$record" ] && [ -r "$prefix/share/nordend/installed-files" ]; then
+        old_files=$(removable_files "$prefix")
+        old_portal=$(record_field "$record" portal)
+    fi
+
+    heading "Source and build"
+    cache=$(cache_dir)
+    source_dir=$cache/source
+    build_dir=$cache/build
+    run mkdir -p "$cache" || failed "Making the cache folder"
+    run rm -rf "$source_dir" "$build_dir" || failed "Clearing the cache folder"
+    run git -c advice.detachedHead=false clone --quiet --depth 1 --branch "$ref" "$repo_url" "$source_dir" ||
+        failed "Downloading the source"
+    if [ "$dry_run" = 0 ]; then
+        commit=$(git -C "$source_dir" rev-parse HEAD)
+        version=$(sed -n 's/^project(nordend VERSION \([0-9.]*\).*/\1/p' "$source_dir/CMakeLists.txt")
+        ok "Nordend $version, commit $commit"
+    else
+        commit='(dry run)' version=${latest:-$ref}
+    fi
+    run cmake -S "$source_dir" -B "$build_dir" -G Ninja --log-level=WARNING -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="$prefix" -DNORDEND_BUILD_TESTS=OFF -DNORDEND_WERROR=OFF \
+        -DNORDEND_INSTALL_SETUP=ON || failed "Configuring the build"
+    run cmake --build "$build_dir" || failed "Building"
+
+    heading "Install"
+    as_needed "$prefix" cmake --install "$build_dir" --strip || failed "Installing"
+    portal=''
+    if [ "$mode" = update ]; then
+        # The same choice as before.
+        if [ -n "$old_portal" ]; then
+            as_needed "$portal_dir" install -m 644 "$source_dir/data/nordend.portal" "$portal_dir/nordend.portal" ||
+                failed "Copying nordend.portal"
+            portal=$old_portal
+        fi
+    elif [ ! -d "$portal_dir" ]; then
+        note "No $portal_dir (xdg-desktop-portal is not installed): Nordend cannot be the file chooser of other applications for now."
+    else
+        say "Other applications find Nordend as their file chooser by $portal_dir/nordend.portal: xdg-desktop-portal reads that folder only."
+        if ask "Copy nordend.portal there?"; then
+            as_needed "$portal_dir" install -m 644 "$source_dir/data/nordend.portal" "$portal_dir/nordend.portal" ||
+                failed "Copying nordend.portal"
+            portal=$portal_dir/nordend.portal
+        fi
+    fi
+
+    # The record and the list, written in the cache, then copied beside the install.
+    if [ "$dry_run" = 0 ]; then
+        {
+            say "# Written by nordend-setup: Nordend as it installed it. 'nordend-setup uninstall' removes"
+            say "# the files listed in installed-files."
+            say "version=$version"
+            say "ref=$ref"
+            say "commit=$commit"
+            say "source=$repo_url"
+            say "prefix=$prefix"
+            say "portal=$portal"
+            say "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            say "setup=$setup_version"
+        } >"$cache/install-record"
+        {
+            cat "$build_dir/install_manifest.txt"
+            printf '\n'
+            [ -z "$portal" ] || say "$portal"
+            say "$prefix/share/nordend/install-record"
+            say "$prefix/share/nordend/installed-files"
+        } | grep -v '^$' >"$cache/installed-files"
+    fi
+    as_needed "$prefix" install -m 644 "$cache/install-record" "$cache/installed-files" \
+        "$prefix/share/nordend/" || failed "Writing the install record"
+    # The earlier install's files that the new one does not have.
+    if [ -n "$old_files" ] && [ "$dry_run" = 0 ]; then
+        stale=$(printf '%s\n' "$old_files" | grep -vxF -f "$cache/installed-files")
+        if [ -n "$stale" ]; then
+            set --
+            while IFS= read -r file; do
+                set -- "$@" "$file"
+            done <<EOF
+$stale
+EOF
+            as_needed "$prefix" rm -f -- "$@" || warn "Some files of the earlier install were left (above)."
+        fi
+    fi
+    run rm -rf "$source_dir" "$build_dir" "$cache/install-record" "$cache/installed-files"
+
+    heading "Done"
+    [ "$dry_run" = 0 ] || {
+        ok "Dry run: nothing was changed."
+        return 0
+    }
+    installed=$("$prefix/bin/nordend" --version 2>/dev/null | awk '{ print $2 }')
+    [ "$installed" = "$version" ] || die "$prefix/bin/nordend does not answer with its version: something went wrong."
+    ok "Nordend $version is installed in $(pretty_path "$prefix")"
+    first=$(nordends_on_path | head -n 1)
+    real_installed=$(readlink -f "$prefix/bin/nordend")
+    if [ -z "$first" ]; then
+        warn "$(pretty_path "$prefix/bin") is not on your PATH: add it to start nordend by name."
+    elif [ "$first" != "$real_installed" ]; then
+        warn "The nordend first on your PATH is $(pretty_path "$first"), not this one."
+    fi
+    note "To remove it: nordend-setup uninstall"
+    if [ "$mode" = update ]; then
+        note "Your settings (file chooser, folders) are kept. Running Nordend windows keep the old version until closed."
+        return 0
+    fi
+    say ''
+    if ask "Set Nordend up now (file chooser, folders)?"; then
+        configure_with "$prefix/bin/nordend"
+    else
+        note "Later: nordend-setup configure"
+    fi
+}
+
+# ---------------------------------------------------------------------------------------------
+# The user's settings: Nordend as the file chooser (nordend --set-file-chooser writes the
+# user's portals.conf) and as the folder opener (xdg-mime; the opener before is kept in
+# STATE/nordend-setup/settings to give it back). Always for the user running the script.
+# ---------------------------------------------------------------------------------------------
+
+settings_file() { printf '%s/nordend-setup/settings' "${XDG_STATE_HOME:-$HOME/.local/state}"; }
+
+# The user's portals.conf files naming Nordend as the file chooser, one per line.
+chooser_confs() {
+    for conf in "${XDG_CONFIG_HOME:-$HOME/.config}"/xdg-desktop-portal/*portals.conf; do
+        [ -r "$conf" ] && grep -q '^[[:space:]]*org\.freedesktop\.impl\.portal\.FileChooser[[:space:]]*=[[:space:]]*nordend' "$conf" &&
+            printf '%s\n' "$conf"
+    done
+    return 0
+}
+
+# The desktop a portals.conf belongs to ("kde" for kde-portals.conf; empty for portals.conf).
+conf_desktop() {
+    c_name=${1##*/}
+    case "$c_name" in
+    *-portals.conf) printf '%s' "${c_name%-portals.conf}" ;;
+    esac
+}
+
+# unset_chooser NORDEND: gives the file chooser back in every portals.conf of the user that
+# names Nordend, each as Nordend would for its own desktop.
+unset_chooser() {
+    confs=$(chooser_confs)
+    [ -n "$confs" ] || return 0
+    while IFS= read -r conf; do
+        run env XDG_CURRENT_DESKTOP="$(conf_desktop "$conf")" "$1" --unset-file-chooser
+    done <<EOF
+$confs
+EOF
+}
+
+# The application that opens folders now (a desktop file name), or empty.
+folder_opener() {
+    command -v xdg-mime >/dev/null 2>&1 || return 0
+    xdg-mime query default inode/directory 2>/dev/null
+}
+
+# Gives folders back to the opener before Nordend, or to none (the desktop's choice) when
+# there was none.
+restore_folders() {
+    [ "$(folder_opener)" = nordend.desktop ] || return 0
+    before=''
+    [ -r "$(settings_file)" ] && before=$(record_field "$(settings_file)" folders_before)
+    if [ -n "$before" ]; then
+        run xdg-mime default "$before" inode/directory
+    else
+        list=${XDG_CONFIG_HOME:-$HOME/.config}/mimeapps.list
+        run sed -i '/^inode\/directory=nordend\.desktop;\{0,1\}$/d' "$list"
+    fi
+    [ "$dry_run" = 1 ] || rm -f "$(settings_file)"
+}
+
+# configure_with NORDEND: asks about each setting, NORDEND being the program to use.
+configure_with() {
+    nordend=$1
+    if [ "$(id -u)" = 0 ] && [ -n "${SUDO_USER:-}" ]; then
+        die "Run nordend-setup configure as yourself, not through sudo: the settings are yours."
+    fi
+    desktop=${XDG_CURRENT_DESKTOP:-}
+    [ -n "$desktop" ] ||
+        warn "XDG_CURRENT_DESKTOP is not set: run this from your desktop session, so the settings land in its files."
+
+    heading "File chooser"
+    say "Other applications (Firefox, Flatpak applications, GTK and Qt ones that ask the portal) can open and save files with Nordend."
+    confs=$(chooser_confs)
+    if [ -n "$confs" ]; then
+        ok "Nordend is the file chooser ($(printf '%s\n' "$confs" | while IFS= read -r c; do pretty_path "$c"; printf ' '; done | sed 's/ $//'))"
+        if ask "Give the file chooser back to the desktop?" n; then
+            unset_chooser "$nordend"
+        fi
+    elif ask "Make Nordend the file chooser?"; then
+        run "$nordend" --set-file-chooser || warn "Nordend could not be made the file chooser (above)."
+    fi
+
+    heading "Folders"
+    if ! command -v xdg-mime >/dev/null 2>&1; then
+        warn "xdg-mime is missing (the package xdg-utils): folders cannot be set from here."
+    else
+        current=$(folder_opener)
+        if [ "$current" = nordend.desktop ]; then
+            ok "Folders open with Nordend"
+            if ask "Give folders back to the application before?" n; then
+                restore_folders
+            fi
+        elif ask "Open folders with Nordend (now: ${current:-nothing set})?"; then
+            if [ "$dry_run" = 0 ]; then
+                mkdir -p "$(dirname "$(settings_file)")"
+                {
+                    say "# Written by nordend-setup: what opened folders before Nordend."
+                    say "folders_before=$current"
+                } >"$(settings_file)"
+            fi
+            run xdg-mime default nordend.desktop inode/directory || warn "xdg-mime failed (above)."
+        fi
+    fi
+
+    heading "A key for Nordend"
+    case "$(printf '%s' "$desktop" | tr '[:upper:]' '[:lower:]')" in
+    *gnome*) note "Settings → Keyboard → Keyboard Shortcuts → Custom Shortcuts: add one with the command nordend." ;;
+    *kde*) note "System Settings → Keyboard → Shortcuts → Add New → Command or Script: nordend." ;;
+    *) note "Bind a key to the command nordend in your desktop's or compositor's settings." ;;
+    esac
+    note "A file chooser change takes effect after logging out and in again."
+}
+
+command_configure() {
+    nordend=$(nordends_on_path | head -n 1)
+    [ -n "$nordend" ] || die "Nordend is not installed (no nordend on your PATH): nordend-setup install first."
+    say "${c_bold}nordend-setup configure${c_off}: Nordend as your file chooser and folder opener."
+    configure_with "$nordend"
+}
+
+command_uninstall() {
+    say "${c_bold}nordend-setup uninstall${c_off}: remove the Nordend that nordend-setup installed."
+    pick_setup_prefix ||
+        die "No Nordend installed by nordend-setup was found (looked in /usr/local, ~/.local and PATH; --prefix DIR for another place)."
+    record=$prefix/share/nordend/install-record
+    files=$(removable_files "$prefix")
+    count=$(printf '%s\n' "$files" | grep -c .)
+    heading "Remove"
+    ok "Nordend $(record_field "$record" version) in $(pretty_path "$prefix"): $count files"
+    printf '%s\n' "$files" | while IFS= read -r file; do note "$(pretty_path "$file")"; done
+    ask "Remove them?" || {
+        say "Nothing removed."
+        return 0
+    }
+    # The settings first, while this Nordend can still undo its own; not when another Nordend
+    # stays installed and may be the one they name.
+    real_this=$(readlink -f "$prefix/bin/nordend" 2>/dev/null)
+    others=$(nordends_on_path | grep -vxF "$real_this")
+    heading "Settings"
+    if [ -n "$others" ]; then
+        note "Another Nordend stays ($(pretty_path "$(printf '%s\n' "$others" | head -n 1)")): the file chooser and folders are left as they are."
+    elif [ "$(id -u)" = 0 ] && [ -n "${SUDO_USER:-}" ]; then
+        warn "Run through sudo: your settings are left as they are (nordend-setup configure can give them back)."
+    else
+        [ -x "$prefix/bin/nordend" ] && unset_chooser "$prefix/bin/nordend"
+        restore_folders
+        ok "The file chooser and folders are the desktop's again"
+    fi
+    # The portal file may lie outside the prefix (in /usr/share): removed on its own.
+    portal=$(record_field "$record" portal)
+    set --
+    while IFS= read -r file; do
+        [ -n "$file" ] && [ "$file" != "$portal" ] && set -- "$@" "$file"
+    done <<EOF
+$files
+EOF
+    [ -z "$portal" ] || ! printf '%s\n' "$files" | grep -qxF "$portal" ||
+        as_needed "$portal_dir" rm -f -- "$portal" || die "Removing $portal failed."
+    as_needed "$prefix" rm -f -- "$@" || die "Removing the files failed."
+    # Nordend's own folders, inner ones first: rmdir removes the empty ones and leaves (with a
+    # message, hidden) any that holds something else.
+    set --
+    for folder in share/nordend/engines share/nordend libexec/nordend; do
+        [ -d "$prefix/$folder" ] && set -- "$@" "$prefix/$folder"
+    done
+    [ $# = 0 ] || as_needed "$prefix" rmdir -- "$@" 2>/dev/null || true
+    heading "Done"
+    ok "Nordend is removed from $(pretty_path "$prefix")"
+}
+
+# ---------------------------------------------------------------------------------------------
+# Commands.
+# ---------------------------------------------------------------------------------------------
+
+command_status() {
+    detect_system
+    status_system
+    status_nordend
+    say ''
+}
+
+guided() {
+    say "${c_bold}nordend-setup${c_off} $setup_version: install, update and configure Nordend."
+    command_status
+    choose "What now?" "Install or update Nordend" "Configure Nordend (file chooser, folders)" \
+        "Check for a new version" "Uninstall Nordend" "Quit"
+    case "$choice" in
+    1) if setup_prefixes | grep -q .; then command_install update; else command_install; fi ;;
+    2) command_configure ;;
+    3) command_check ;;
+    4) command_uninstall ;;
+    5) ;;
+    esac
+}
+
+usage() {
+    cat <<EOF
+Usage: nordend-setup [OPTIONS] [COMMAND]
+
+Install, update and configure Nordend from its source code. Without a command, it asks what to do.
+
+Commands:
+  install     check the system, install what is missing, build and install Nordend
+  update      build and install the newest version, with the same choices as before
+  check       tell whether a newer version is out (asks GitHub; nothing is installed)
+  configure   make Nordend the file chooser and the folder opener, or give them back
+  status      show the system, the installed Nordend and its settings
+  uninstall   remove what nordend-setup installed and put the settings back
+
+Options:
+  -y, --yes       answer yes to every question (and take the recommended choices)
+  -n, --dry-run   show every command without running anything (the newest release is still
+                  asked of GitHub)
+      --prefix DIR  install into DIR (default: asked; /usr/local recommended), or the install
+                  there to update or remove
+      --ref REF   build the branch or tag REF instead of the newest release (for testing)
+      --no-color  no colours (NO_COLOR does the same)
+  -h, --help      show this help
+  -V, --version   show nordend-setup's version
+
+Source: $repo_url
+EOF
+}
+
+# An update replaces this very file; sh reads a script as it runs, so nordend-setup runs from a
+# copy of itself, removed on exit.
+run_from_copy() {
+    [ -z "${NORDEND_SETUP_COPY:-}" ] || {
+        trap 'rm -f "$NORDEND_SETUP_COPY"' EXIT
+        trap 'exit 130' INT TERM
+        return 0
+    }
+    [ -f "$0" ] || return 0
+    copy=$(mktemp "${TMPDIR:-/tmp}/nordend-setup.XXXXXX") || return 0
+    cp "$0" "$copy" || {
+        rm -f "$copy"
+        return 0
+    }
+    NORDEND_SETUP_COPY=$copy exec sh "$copy" "$@"
+}
+
+# The tools nordend-setup itself runs, there on every Linux system it knows; stops naming any
+# that is missing.
+check_own_tools() {
+    lacking=''
+    for tool in awk sed grep sort head tail tr wc id readlink dirname mktemp cp install date; do
+        command -v "$tool" >/dev/null 2>&1 || lacking="$lacking $tool"
+    done
+    [ -z "$lacking" ] || {
+        printf 'nordend-setup needs these programs, not found:%s\n' "$lacking" >&2
+        exit 1
+    }
+}
+
+main() {
+    check_own_tools
+    run_from_copy "$@"
+    command=''
+    while [ $# -gt 0 ]; do
+        arg=$1
+        shift
+        case "$arg" in
+        --prefix | --ref)
+            [ $# -gt 0 ] || {
+                printf 'nordend-setup: %s needs a value\n' "$arg" >&2
+                exit 2
+            }
+            [ "$arg" = --prefix ] && opt_prefix=$1 || opt_ref=$1
+            shift
+            ;;
+        --prefix=*) opt_prefix=${arg#--prefix=} ;;
+        --ref=*) opt_ref=${arg#--ref=} ;;
+        -y | --yes) assume_yes=1 ;;
+        -n | --dry-run) dry_run=1 ;;
+        --no-color | --no-colour) use_color=0 ;;
+        -h | --help)
+            usage
+            exit 0
+            ;;
+        -V | --version)
+            say "nordend-setup $setup_version"
+            exit 0
+            ;;
+        install | update | check | configure | status | uninstall)
+            [ -z "$command" ] || {
+                usage >&2
+                exit 2
+            }
+            command=$arg
+            ;;
+        *)
+            printf 'nordend-setup: unknown argument: %s\n\n' "$arg" >&2
+            usage >&2
+            exit 2
+            ;;
+        esac
+    done
+    setup_output
+
+    case "$command" in
+    '')
+        [ "$assume_yes" = 0 ] || die "--yes needs a command (install, update, ...): it answers questions for one."
+        guided
+        ;;
+    status) command_status ;;
+    install) command_install ;;
+    uninstall) command_uninstall ;;
+    configure) command_configure ;;
+    update) command_install update ;;
+    check) command_check ;;
+    esac
+}
+
+main "$@"

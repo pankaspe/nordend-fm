@@ -4,6 +4,70 @@ Work log, newest first. Each entry: what was done, decisions, measurements, open
 
 ---
 
+## 2026-11-14 — nordend-setup (ROADMAP 4¼)
+
+**Done**
+- `scripts/nordend-setup`: one POSIX sh script (shellcheck clean; tried under dash and
+  `bash --posix`) with `install`, `update`, `check`, `configure`, `status`, `uninstall`, and a
+  guided menu without a command. Options `--yes`, `--dry-run`, `--no-color`, `--prefix DIR`,
+  `--ref REF` (a branch or tag instead of the newest release, for testing); `NORDEND_SETUP_REPO`
+  and `NORDEND_SETUP_OS_RELEASE` point it at a local repository and another os-release, for
+  testing.
+- The system: os-release read with sed (never sourced); package manager from `ID` then
+  `ID_LIKE`; releases known too old stopped with the reason (Ubuntu before 26.04, and its
+  derivatives on focal/jammy/noble such as Mint 22: sdbus-c++ 1.x; Debian before 13: GCC 12);
+  checks for GCC 13+ (clang 21+, older clang warned, not stopped), CMake 3.20+, Ninja, Git,
+  pkg-config and the 17 modules with sdbus-c++ 2.1+; the install command for what is missing,
+  zypper's `pkgconfig(...)` names quoted so the line pastes; pacman with `-Syu`.
+- `status`: every `nordend` on PATH by its real path (`/bin` → `/usr/bin` once), its version
+  and who installed it (any package database present, Nix, nordend-setup or by hand); a
+  different version further down PATH is warned about; the file chooser and the folder opener.
+- `install`: stops when a package or Nix installed Nordend; the newest release by
+  `git ls-remote --tags` (0.7.2 and newer); `git clone --depth 1 --branch vX.Y.Z` over HTTPS
+  into `~/.cache/nordend-setup`, CMake Release build, `cmake --install --strip` into
+  `/usr/local` (recommended) or `~/.local`; `nordend.portal` copied to `/usr/share` on request;
+  `PREFIX/share/nordend/install-record` (version, ref, commit, source, prefix, portal, date) and
+  `installed-files`; the cache emptied. sudo only where the folder is not the user's, asked once
+  per run, every command shown.
+- `uninstall` removes only the listed files under the prefix and the portal file its record
+  names, then Nordend's empty folders; settings first (below).
+- `configure`: `nordend --set-file-chooser`, or `--unset-file-chooser` for every
+  `*-portals.conf` of the user that names Nordend (each with its desktop); folders through
+  `xdg-mime`, the opener before kept in `~/.local/state/nordend-setup/settings` and given back;
+  where to set a key, by desktop. `install` offers it at the end; refused through sudo.
+- `check` and `update`: the installed version from the record against the newest tag;
+  `update` builds it with the same prefix and portal choice and removes the files the new
+  version no longer has. The script runs from a copy of itself in `/tmp`, so `update` can
+  replace it.
+- CMake: `NORDEND_INSTALL_SETUP` (off; on only for nordend-setup's builds) installs the script
+  beside `nordend`; the D-Bus service file, written by `install(CODE)`, now goes into
+  `install_manifest.txt` too (it was missing, so removing by the manifest left it).
+- CI `.github/workflows/setup.yml`: shellcheck, and on Debian 13, Ubuntu 26.04, Fedora 43, Arch
+  and Tumbleweed (containers with only git): install with `--yes` from this commit, status,
+  check, update, uninstall, and every listed file gone; weekly too.
+
+**Measured**
+- CMake 4.2's `cmake --install` unlinks a file before writing it (strace), so a running script
+  would survive; older CMake not checked: hence the copy.
+- Install in the Void VM (6 vCPUs), clone to installed: 135 s.
+
+**Decisions**
+- Source by `git clone` of the tag over HTTPS (TLS and git's hashes; the commit in the record);
+  signed tags maybe later. Default prefix `/usr/local`, `nordend.portal` in `/usr/share`.
+- A Nordend from a package is the package manager's: nordend-setup stops rather than installing
+  a second copy.
+
+**Tested by the author** (Void VM, Plasma): `status`, the colours, the menu; install into
+`/usr/local` and uninstall from the menu; the file chooser from `/usr/local` with Firefox;
+`configure` (folders to Nordend and back to Dolphin); `check` and `update` from 0.7.2 to 0.7.3
+(made-up tags in a local repository).
+
+**Open**
+- Not tried by hand yet on the other distributions (the Arch VM is next, 4¼f).
+- xdg-mime prints "qtpaths: not found" on Void's Plasma 6: its own noise, the change is made.
+
+---
+
 ## 2026-11-14 — Building on other distributions (toward nordend-setup, ROADMAP 4¼)
 
 **Measured** (a CI workflow on the `distro-check` branch: each distribution's own packages,

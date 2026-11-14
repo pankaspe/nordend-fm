@@ -1,0 +1,105 @@
+# nordend-setup (ROADMAP 4¼) on the distributions it knows, each in its own container: from a
+# system with only git to Nordend installed (the build dependencies through the script, with the
+# distribution's package manager), set up, checked, updated and removed, every file gone. Run as
+# root, as containers are: the script's sudo steps run directly. It installs the commit under
+# test, not a release: NORDEND_SETUP_REPO names this checkout and --ref a tag made on it.
+# Weekly too, since the distributions move on under the script.
+name: nordend-setup
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: setup-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: |
+          shellcheck --version | head -n 2
+          shellcheck scripts/nordend-setup
+
+  setup:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    container:
+      image: ${{ matrix.image }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: debian-13
+            image: debian:trixie
+            git: apt-get update && apt-get install -y --no-install-recommends git ca-certificates
+          - name: ubuntu-26.04
+            image: ubuntu:26.04
+            git: apt-get update && apt-get install -y --no-install-recommends git ca-certificates
+          - name: fedora-43
+            image: fedora:43
+            git: dnf install -y git
+          - name: arch
+            image: archlinux:latest
+            git: pacman -Syu --noconfirm git
+          - name: opensuse-tumbleweed
+            image: opensuse/tumbleweed:latest
+            git: zypper --non-interactive install git
+    env:
+      TERM: dumb
+    steps:
+      - name: Git, for the checkout and the script
+        run: ${{ matrix.git }}
+      - uses: actions/checkout@v4
+      - name: Mark this commit
+        run: |
+          git config --global --add safe.directory '*'
+          git tag setup-under-test HEAD
+      - name: Status before
+        run: sh scripts/nordend-setup status
+      - name: Install (packages, build, install, configure)
+        run: |
+          NORDEND_SETUP_REPO="file://$GITHUB_WORKSPACE" \
+            sh scripts/nordend-setup --yes --ref setup-under-test install
+      - name: Installed
+        run: |
+          command -v nordend nordend-setup
+          nordend --version
+          nordend-setup status
+          grep -rn 'FileChooser=nordend' /root/.config/xdg-desktop-portal/
+          cat /usr/local/share/nordend/install-record
+      - name: Check (asks GitHub)
+        run: nordend-setup check
+      - name: Update (the installed script, rebuilding the same commit)
+        run: |
+          NORDEND_SETUP_REPO="file://$GITHUB_WORKSPACE" \
+            nordend-setup --yes --ref setup-under-test update
+          nordend --version
+      - name: Uninstall, and nothing left
+        run: |
+          cp /usr/local/share/nordend/installed-files /tmp/installed-files
+          nordend-setup --yes uninstall
+          left=0
+          while IFS= read -r file; do
+            if [ -e "$file" ]; then echo "left: $file"; left=1; fi
+          done < /tmp/installed-files
+          for folder in /usr/local/share/nordend /usr/local/libexec/nordend; do
+            if [ -e "$folder" ]; then echo "left: $folder"; left=1; fi
+          done
+          if grep -rqs 'FileChooser=nordend' /root/.config/xdg-desktop-portal/; then
+            echo "left: the file chooser setting"; left=1
+          fi
+          test "$left" = 0
+          if command -v nordend; then exit 1; fi
+          echo "all $(wc -l < /tmp/installed-files) files removed"

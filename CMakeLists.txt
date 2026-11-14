@@ -254,4 +254,12 @@ install(CODE [[
     message(STATUS "Installing: ${target}")
     file(WRITE "${target}" "[D-BUS Service]\nName=org.freedesktop.impl.portal.desktop.nordend\n"
                            "Exec=${CMAKE_INSTALL_PREFIX}/libexec/nordend/nordend-portal\n")
+    # In install_manifest.txt with the other files, as file(INSTALL) would list it.
+    list(APPEND CMAKE_INSTALL_MANIFEST_FILES "${target}")
 ]])
+# nordend-setup (ROADMAP 4¼) beside nordend, for the installs it makes: off for packages, whose
+# package manager updates and removes Nordend.
+option(NORDEND_INSTALL_SETUP "Install the nordend-setup script beside nordend" OFF)
+if(NORDEND_INSTALL_SETUP)
+    install(PROGRAMS scripts/nordend-setup DESTINATION bin)
+endif()
