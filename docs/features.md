@@ -144,11 +144,10 @@ README's [What's next](../README.md#whats-next).
   shows its newest lines: its last 256 KiB, opened at the bottom, "last N lines" in the caption.
 - **The info pane** beside every view shows the preview and what the file is: size, pixel size,
   dates (including the birth time), type, and for photos the shot itself (camera, lens,
-  exposure, aperture, ISO, focal length, when) with your darktable rating from the `.xmp`
-  sidecar. "More details" adds permissions, owner and group, link target and item count. In the
+  exposure, aperture, ISO, focal length, when). "More details" adds permissions, owner and group, link target and item count. In the
   grid and the details Ctrl+I hides it, and its edge can be dragged from 240 to 720 px.
-- **darktable-aware:** sidecars get their own icon, show your rating, and follow their photo when
-  it is renamed.
+- **darktable-aware:** sidecars get their own icon and follow their photo when it is renamed,
+  copied, moved or trashed. Their ratings are not read: Nordend's own ratings come later.
 
 ## Working with files
 
@@ -434,14 +433,14 @@ README's [What's next](../README.md#whats-next).
 | The whole folder loaded and sorted (warm / cold) | 19.5 ms / 81 ms |
 | A scrolling frame at 2880x1620 (columns / grid / details) | 0.26 / 0.30 / 0.36-0.50 ms |
 | Sorting 10 000 entries by size, date or type | 1-3 ms |
-| Quick Look of an ORF, fitted to 2880x1620 | 51-55 ms |
+| Quick Look of an ORF on screen (its thumbnail at once) | 131 ms, over the 100 ms target: being looked into |
 | Reading every installed app to choose one | 0.5 ms |
 | Copying 342 photos, 3.1 GB, warm cache (Nordend / `cp -a`) | 1.39 s / 1.39 s |
 | CPU while nothing moves | 0 |
 
-A 3.5 MB binary (2.9 MB stripped) with 21 direct libraries; 25 MB of its own memory at start,
-54 MB after browsing 163 raw photos (143 MB resident with the shared libraries): decoded photos
-go back to the system.
+A 4.26 MB binary (3.55 MB stripped) with 17 direct libraries; 24 MB of its own memory at start.
+Pictures are decoded in the `nordend-preview` helpers, which give their memory back after a quiet
+second (binary measured 2026-11-14, memory 2026-11-13).
 
 ## Settings
 

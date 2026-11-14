@@ -18,9 +18,9 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/readme-screenshot.webp" alt="Nordend in a dark theme taken from Noctalia: one header with back and forward, the path and the window's buttons, the sidebar running to the top, three tabs, five columns down a project folder, and the info pane with a JSON file's coloured preview" width="100%">
+  <img src="docs/images/readme-columns.webp" alt="Nordend in a dark theme taken from Noctalia: one header with back and forward and the path, the sidebar running to the top with places, bookmarks and a disk, three tabs, six columns down a game project, and the info pane with a source file's coloured preview and its details" width="100%">
   <br>
-  <sub>One header, the sidebar to the top, three tabs, the columns down a project, and a JSON file's preview in the info pane, all in the colours of the desktop's theme.</sub>
+  <sub>One header, the sidebar to the top, three tabs, the columns down a project, and a source file's preview in the info pane, all in the colours of the desktop's theme.</sub>
 </p>
 
 > [!NOTE]
@@ -44,7 +44,7 @@ light or dark style and accent, live ([Colours](#colours)).
 - **Fast.** The first frame in about 75 ms, the first entries of a 10 000-file folder in under
   1 ms, a raw photo in Quick Look at once as its thumbnail and sharp in about 130 ms. Every
   figure is measured, with the tool to measure it again.
-- **Light.** A 3.4 MB binary, 17 libraries, about 24 MB of memory, and no CPU at all while
+- **Light.** A 3.5 MB binary, 17 libraries, about 24 MB of memory, and no CPU at all while
   nothing moves.
 - **Safe with what it reads.** Files that come from outside are read by `nordend-preview`, a
   small helper process in a cage of Nordend's own (seccomp and landlock: no files, no network,
@@ -54,8 +54,8 @@ light or dark style and accent, live ([Colours](#colours)).
   and GIF by [wuffs](https://github.com/google/wuffs), memory-safe by construction. Raw files
   show the JPEG their camera stored, so the camera's own rendering; a DNG whose stored previews
   are too small is developed by Nordend's own reader, with the file's own colour.
-- **Photos and their editors.** Thumbnails, the info pane and Quick Look with the shot's EXIF
-  and rating; darktable sidecars travel with their photo through every rename, copy, move and
+- **Photos and their editors.** Thumbnails, the info pane and Quick Look with the shot's EXIF;
+  darktable sidecars travel with their photo through every rename, copy, move and
   trip to the trash.
 - **Three views of the same folder.** Columns, a thumbnail grid and a details table
   (<kbd>Ctrl</kbd>+<kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd>); switching keeps your place and your
@@ -65,10 +65,39 @@ light or dark style and accent, live ([Colours](#colours)).
   start.
 - **Careful with your files.** Nothing overwritten without asking, nothing half-copied under a
   real name, a real freedesktop trash, and <kbd>Ctrl</kbd>+<kbd>Z</kbd>.
+- **Also your Open and Save dialog.** Other applications can choose and save files through
+  Nordend, with its views and thumbnails ([how](#as-the-file-chooser-of-other-applications)).
 - **Keyboard first, mouse always.** Every action has a key (<kbd>F1</kbd> lists them) and a click.
 
 Everything it does is in [docs/features.md](docs/features.md); inside Nordend, <kbd>F1</kbd> lists
 every shortcut.
+
+## Screenshots
+
+<p align="center">
+  <img src="docs/images/readme-grid.webp" alt="Nordend's grid of raw photos from a mountain walk, one selected, with the info pane showing its preview, size, dimensions, camera, lens, exposure, focal length and more details" width="100%">
+  <br>
+  <sub>A folder of Olympus raw files in the grid: the previews their camera stored, upright, and the shot's EXIF in the info pane.</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/readme-chooser.webp" alt="Firefox's Save As dialog shown by Nordend over Firefox's window: the sidebar, the Documents folder in the grid, the info pane, and at the bottom the name field, Firefox's Web Page, complete choice, New Folder, Cancel and Save" width="75%">
+  <br>
+  <sub>New in 0.7.0: Nordend as the Open and Save dialog of other applications, here Firefox's Save As, with the application's own choice in the bar.</sub>
+</p>
+
+<table>
+  <tr>
+    <td width="33%"><img src="docs/images/readme-palette.webp" alt="The command palette: a search field over a list of commands with their shortcuts"></td>
+    <td width="33%"><img src="docs/images/readme-find.webp" alt="Finding files: a search field over files and folders found under the folder"></td>
+    <td width="33%"><img src="docs/images/readme-menu.webp" alt="The context menu on empty space, with Sort By open on its submenu"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>The command palette, <kbd>Ctrl</kbd>+<kbd>K</kbd></sub></td>
+    <td align="center"><sub>Finding files, <kbd>Ctrl</kbd>+<kbd>F</kbd></sub></td>
+    <td align="center"><sub>The context menu and Sort By</sub></td>
+  </tr>
+</table>
 
 ## Features
 
@@ -81,7 +110,7 @@ every shortcut.
 - **Images:** PNG, JPEG, GIF (wuffs), WebP, JPEG XL, and TIFF, PGM and PPM with Nordend's own
   readers; thumbnails in the shared freedesktop cache
 - **Isolated reading:** every picture is made in a caged helper process, never in Nordend
-- **darktable:** sidecars follow their photo everywhere; ratings shown
+- **darktable:** sidecars follow their photo everywhere
 - **Command palette** (<kbd>Ctrl</kbd>+<kbd>K</kbd>): every command, place and tab, fuzzy-matched
   (fzy), the recently used first
 - **Find files** (<kbd>Ctrl</kbd>+<kbd>F</kbd>): fuzzy search of every file under the folder,

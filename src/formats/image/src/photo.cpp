@@ -20,7 +20,7 @@ PhotoInfo read_photo_info(const std::filesystem::path& path) {
 }
 
 PhotoInfo read_photo_info(int fd) {
-    // No rating: Nordend's own comes with ROADMAP 5; editors' sidecars are a plugin's (decided
+    // No rating: Nordend's own comes with ROADMAP 6; editors' sidecars are a plugin's (decided
     // with the author, 2026-11-08).
     if (const std::optional<detail::FdFile> file = detail::FdFile::of(fd)) {
         return camera::read_info(*file);
