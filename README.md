@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.0"><img src="https://img.shields.io/badge/release-v0.7.0-2a6a9e" alt="release v0.7.0"></a>
+  <a href="https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.1"><img src="https://img.shields.io/badge/release-v0.7.1-2a6a9e" alt="release v0.7.1"></a>
   <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white" alt="C++20">
   <img src="https://img.shields.io/badge/Wayland-native-FFBC00?logo=wayland&logoColor=black" alt="Wayland native">
   <img src="https://img.shields.io/badge/tests-482%20%C2%B7%20ASan%20%C2%B7%20TSan-4B32C3" alt="482 tests, ASan, TSan">
@@ -24,15 +24,30 @@
 </p>
 
 > [!NOTE]
-> **Nordend 0.7.0**, the latest release: **Nordend can be the Open and Save dialog of other
-> applications**, through the desktop portal: the same views, thumbnails and Quick Look, the
-> application's filters and choices, saving with a question before replacing a file.
-> `nordend --set-file-chooser` chooses it for your desktop
-> ([how](#as-the-file-chooser-of-other-applications)). Tried with Firefox, GTK and Qt
-> applications on Umbriel, GNOME and Plasma. Young software, used every day by its
-> author. On Void Linux, [install it as a package](#on-void-linux); on NixOS or
-> with Nix, from [its flake](#on-nixos-and-with-nix); anywhere else,
-> [build it from source](#from-source) in about a minute.
+> **Nordend 0.7.1**, the latest release: **sharp photos sooner** in Quick Look and the grid
+> (the image scaler twice as fast, the same pixels; portrait photos no longer made larger than
+> the screen), and **the sidebar's bookmarks renamed, pointed to another folder and reordered**
+> in place (right click, or F2 and Alt+↑/↓), asked for by Evergaster. Since 0.7.0 Nordend can
+> also be the Open and Save dialog of other applications
+> ([how](#as-the-file-chooser-of-other-applications)). Young software, used every day by its
+> author. [Install it](#install) as a package on Void Linux, from its flake on NixOS or with
+> Nix, or build it from source anywhere else in about a minute.
+
+## Contents
+
+- [Why Nordend](#why-nordend)
+- [Screenshots](#screenshots)
+- [Features](#features)
+- [At a glance](#at-a-glance)
+- [Benchmarks](#benchmarks)
+- [Install](#install): Void Linux, NixOS and Nix, from source;
+  [then](#then), [as the file chooser of other applications](#as-the-file-chooser-of-other-applications),
+  [colours](#colours)
+- [Versions](#versions)
+- [What's next](#whats-next)
+- [Documentation](#documentation)
+- [Development](#development)
+- [License](#license)
 
 ## Why Nordend
 
@@ -44,7 +59,7 @@ light or dark style and accent, live ([Colours](#colours)).
 - **Fast.** The first frame in about 75 ms, the first entries of a 10 000-file folder in under
   1 ms, a raw photo in Quick Look at once as its thumbnail and sharp in about 100 ms. Every
   figure is measured, with the tool to measure it again.
-- **Light.** A 3.5 MB binary, 17 libraries, about 24 MB of memory, and no CPU at all while
+- **Light.** A 3.6 MB binary, 17 libraries, about 24 MB of memory, and no CPU at all while
   nothing moves.
 - **Safe with what it reads.** Files that come from outside are read by `nordend-preview`, a
   small helper process in a cage of Nordend's own (seccomp and landlock: no files, no network,
@@ -137,9 +152,9 @@ every shortcut.
 
 | | |
 |---|---|
-| Binary | **4.26 MB** (3.55 MB stripped), x86-64; the decoders and text readers in `nordend-preview`, 1.15 MB (1.03 stripped), a separate caged helper; the file chooser's service `nordend-portal`, 0.35 MB (0.28 stripped), started only when an application asks |
+| Binary | **4.33 MB** (3.61 MB stripped), x86-64; the decoders and text readers in `nordend-preview`, 1.15 MB (1.03 stripped), a separate caged helper; the file chooser's service `nordend-portal`, 0.36 MB (0.29 stripped), started only when an application asks |
 | Libraries | 17 direct (the helper and the service: 8 each); no GTK, no Qt, no GLib |
-| Code | about 55 600 lines of C++20, 19 900 of tests (482 test cases, under ASan and TSan too) |
+| Code | about 56 400 lines of C++20, 20 300 of tests (482 test cases, under ASan and TSan too) |
 | Memory | **24 MB** of its own at start; pictures are decoded in the helpers, which give their memory back after a quiet second |
 | Idle | **0 CPU**: nothing is drawn while nothing moves |
 
@@ -160,9 +175,11 @@ Every measurement and its method is in [docs/benchmarks.md](docs/benchmarks.md).
 ## Install
 
 Nordend needs Linux with a Wayland compositor that offers xdg-shell (developed on Umbriel, also
-tried on GNOME, Plasma and niri) and a GPU driver with OpenGL ES 3.0 (Mesa).
+tried on GNOME, Plasma and niri) and a GPU driver with OpenGL ES 3.0 (Mesa). Three ways, each
+opens with a click:
 
-### On Void Linux
+<details>
+<summary><b>On Void Linux</b>: a package built from its xbps-src template</summary>
 
 Nordend is developed on Void, and comes with an xbps-src template in
 [`packaging/void`](packaging/void). It builds the latest release into a package that puts
@@ -181,10 +198,13 @@ cp -r /tmp/nordend-fm/packaging/void/nordend srcpkgs/
 sudo xbps-install -R hostdir/binpkgs nordend
 ```
 
-The package is the latest release, **0.7.0**. What `main` gains after it comes with the next
+The package is the latest release, **0.7.1**. What `main` gains after it comes with the next
 release; to have it at once, build from source.
 
-### On NixOS and with Nix
+</details>
+
+<details>
+<summary><b>On NixOS and with Nix</b>: the flake, built on your machine</summary>
 
 Nordend comes with a flake: [`flake.nix`](flake.nix), and the package in
 [`packaging/nix`](packaging/nix). It is not in nixpkgs, and there is no binary cache: Nix builds
@@ -207,7 +227,10 @@ nixpkgs.overlays = [ inputs.nordend.overlays.default ];
 environment.systemPackages = [ pkgs.nordend ];
 ```
 
-### From source
+</details>
+
+<details>
+<summary><b>From source</b>: on any distribution, with CMake</summary>
 
 On Void Linux the packages are these; elsewhere, the development packages of the same libraries
 (their names differ and have not been tried yet):
@@ -227,6 +250,8 @@ cmake --install build --prefix ~/.local --strip   # nordend, its desktop entry a
 
 To have Nordend as the file chooser of other applications (below), install it under `/usr`
 instead: `sudo cmake --install build --prefix /usr --strip`.
+
+</details>
 
 ### Then
 
@@ -282,6 +307,7 @@ settled.
 
 | Version | What it brought |
 |---|---|
+| [0.7.1](https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.1), 2026-11-14 | Quick Look of a raw photo from 144 to 110 ms on screen (median about 102), and grid thumbnails made faster: the image scaler rewritten (twice as fast, the very same pixels), portrait photos made to fit the screen instead of 78 % larger; the sidebar's bookmarks renamed, pointed to another folder (Nordend's own folder chooser) and moved up or down, from their menu or with F2 and Alt+↑/↓, from Evergaster's issue |
 | [0.7.0](https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.0), 2026-11-14 | Nordend as the file chooser of other applications, through the desktop portal: open files or folders with its views, thumbnails and Quick Look, the application's filters and choices, saving with New Folder and a question before replacing, over the application's window on GNOME and Plasma; `nordend --set-file-chooser` and `--unset-file-chooser`; a small `nordend-portal` service that D-Bus starts when an application asks, one chooser window per request |
 | [0.6.2](https://github.com/pankaspe/nordend-fm/releases/tag/v0.6.2), 2026-11-13 | Copy the shown folder's path (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>, "Copy Path" on empty space and in the command palette); the terminal chosen in `config.toml` (`[terminal] program` and `args`, live), before `$TERMINAL`, for Open in Terminal and terminal apps; both from Evergaster's issue |
 | [0.6.1](https://github.com/pankaspe/nordend-fm/releases/tag/v0.6.1), 2026-11-13 | Rounded corners and a soft shadow around Nordend's own header, as GTK draws them (square with `[window] corner_radius = 0`); the shadow's edge resizes the window; a see-through background with solid text, icons and pictures (`[window] background_opacity`, by barrulus); a clean exit at logout, with the session's tabs and views saved, when the session bus goes first (GNOME) |
@@ -307,7 +333,8 @@ code in caged helpers; 0.5.0 text previews with syntax colours, selecting and co
 grid thumbnails up to 512 px, hardened builds and a Nix flake; 0.6.0 the colours of your theme
 with nothing to set up and one header for the whole window; 0.6.1 rounded corners and a shadow
 around it, square corners or a see-through background on request; 0.6.2 copying the folder's
-path and choosing the terminal; 0.7.0 Nordend as the file chooser of other applications.
+path and choosing the terminal; 0.7.0 Nordend as the file chooser of other applications;
+0.7.1 sharper photos sooner and bookmarks renamed and reordered.
 Coming, roughly in this order: **network shares** in the sidebar (Samba, SFTP, FTP, WebDAV,
 through gvfs when it runs); then **previews, one family at a time**: other common formats one by one (SVG, AVIF, fonts,
 archive contents, audio tags).

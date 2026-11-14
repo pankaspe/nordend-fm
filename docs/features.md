@@ -492,9 +492,11 @@ FileChooser and portals.conf.
 
 ## Next
 
-0.7.0 is out (Nordend as the file chooser of other applications through xdg-desktop-portal:
-opening, folders, filters, saving, `nordend --set-file-chooser`; tried on Umbriel, GNOME and
-Plasma), after 0.6.2 (Ctrl+Shift+C copies the folder's path; the terminal chosen in
+0.7.1 is out (Quick Look and grid thumbnails faster: the image scaler rewritten, portrait
+photos fitted to the screen; the sidebar's bookmarks renamed, pointed elsewhere and reordered,
+from Evergaster's issue #10), after 0.7.0 (Nordend as the file chooser of other applications
+through xdg-desktop-portal: opening, folders, filters, saving, `nordend --set-file-chooser`;
+tried on Umbriel, GNOME and Plasma), 0.6.2 (Ctrl+Shift+C copies the folder's path; the terminal chosen in
 `config.toml`; both from Evergaster's issue #9), 0.6.1 (rounded corners and a shadow around Nordend's header,
 square on request; a see-through background by barrulus; a clean exit at logout), 0.6.0 (the colours of your GTK
 theme, read live with nothing to set up; one header for the whole window), 0.5.1 (grid thumbnails up to 512 px, hardened builds, a Nix flake,

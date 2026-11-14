@@ -4,6 +4,18 @@ Work log, newest first. Each entry: what was done, decisions, measurements, open
 
 ---
 
+## 2026-11-14 — Nordend 0.7.1
+
+A patch release: Quick Look of an ORF from 144 to 110 ms on screen (median about 102) (the scaler rewritten,
+portraits fitted), and issue #10 (bookmarks renamed, pointed elsewhere, reordered). CMake
+version, README (badge, note, At a glance, install note, Versions, What's next, the "Light"
+figure) and features say so. At a glance: nordend 4.33 MB / 3.61 stripped, the helper 1.15 /
+1.03, `nordend-portal` 0.36 / 0.29, `readelf -d` NEEDED 17, 8 and 8, 56 400 + 20 300 lines, 482
+tests (doctest: 481 passed + 1 skipped); memory not re-measured. Engine protocol still 4; the
+scaler is no parser, so no fuzz run.
+
+---
+
 ## 2026-11-14 — Bookmarks renamed, pointed elsewhere and reordered (issue #10)
 
 **Tested by the author** (2026-11-14, `build/nordend`, his own GTK bookmarks backed up first):
