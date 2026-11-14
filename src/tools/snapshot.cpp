@@ -37,6 +37,11 @@
 // or Plasma: LOOK is "dark" or "light", with an accent after a comma: "dark,#3584e4".
 // --gtk draws with the palette made from a gtk.css's colours (and what it imports), as Nordend
 // reads the user's; read only.
+// --record SCRIPT --frames DIR records a short film after the keys: SCRIPT is comma-separated
+// steps, each a key as in KEYS, "type=TEXT" (its letters at once, one frame) or "wait=MS"; a frame
+// is drawn every 1/30 s of real time (the animations run as on screen, the workers' results arrive
+// between frames) and written to DIR/frame-00001.ppm and on; out.ppm is the last frame. ffmpeg
+// turns them into a film.
 //
 // Uses a surfaceless EGL context (EGL_MESA_platform_surfaceless) and a framebuffer object, so
 // it never talks to the compositor and never opens a window: it is how rendering is checked
@@ -52,6 +57,7 @@
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <functional>
 #include <malloc.h>
@@ -107,16 +113,19 @@ void write_ppm(const std::string& path, std::int32_t width, std::int32_t height,
                std::span<const std::uint8_t> rgba) {
     std::ofstream out{path, std::ios::binary};
     out << "P6\n" << width << ' ' << height << "\n255\n";
-    // GL rows go bottom-up; PPM rows go top-down.
+    // GL rows go bottom-up; PPM rows go top-down. One write: --record writes 30 a second.
     const auto row_bytes = static_cast<std::size_t>(width) * 4;
+    std::vector<char> rgb;
+    rgb.reserve(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 3);
     for (std::int32_t y = height - 1; y >= 0; --y) {
         const auto row = rgba.subspan(static_cast<std::size_t>(y) * row_bytes, row_bytes);
         for (std::size_t x = 0; x < row_bytes; x += 4) {
-            out.put(static_cast<char>(row[x]));
-            out.put(static_cast<char>(row[x + 1]));
-            out.put(static_cast<char>(row[x + 2]));
+            rgb.push_back(static_cast<char>(row[x]));
+            rgb.push_back(static_cast<char>(row[x + 1]));
+            rgb.push_back(static_cast<char>(row[x + 2]));
         }
     }
+    out.write(rgb.data(), static_cast<std::streamsize>(rgb.size()));
     if (!out) {
         throw std::runtime_error{"cannot write " + path};
     }
@@ -247,6 +256,8 @@ int main(int argc, char** argv) {
     std::optional<std::string> csd;
     std::optional<std::string> desktop;
     std::optional<std::string> gtk_css;
+    std::string record;
+    std::filesystem::path frames_dir;
     while (args.size() >= 2) {
         const std::string_view option{args[1]};
         if (option == "--info-expanded") {  // the info pane with "More details" open
@@ -322,6 +333,10 @@ int main(int argc, char** argv) {
             desktop = args[2];
         } else if (option == "--gtk") {
             gtk_css = args[2];
+        } else if (option == "--record") {
+            record = args[2];
+        } else if (option == "--frames") {
+            frames_dir = args[2];
         } else if (option == "--walk") {
             walk_frames = std::stoi(args[2]);
         } else if (option == "--bench") {
@@ -339,7 +354,8 @@ int main(int argc, char** argv) {
             "[--drop-over X,Y] [--band X1,Y1,X2,Y2] [--pick FILTERS|folders|save:NAME[,FILTERS]] "
             "[--fake-disks] "
             "[--memory [--trim] "
-            "[--default-malloc]]] [--csd STATE] [--desktop LOOK] [--gtk FILE] "
+            "[--default-malloc]] [--record SCRIPT --frames DIR]] [--csd STATE] [--desktop LOOK] "
+            "[--gtk FILE] "
             "<out.ppm> "
             "[logical-width logical-height scale [colors.toml]]");
         return 2;
@@ -679,6 +695,56 @@ int main(int argc, char** argv) {
                         drag_image = std::pair{x + 8.0F, y + 8.0F};
                     }
                 }
+            }
+            if (columns && !record.empty()) {
+                if (frames_dir.empty()) {
+                    throw std::runtime_error{"--record needs --frames DIR"};
+                }
+                std::filesystem::create_directories(frames_dir);
+                const std::chrono::microseconds frame_time{33'333};
+                int written = 0;
+                int late = 0;
+                auto next = std::chrono::steady_clock::now();
+                const auto shoot = [&] {
+                    // The loop runs until this frame's time: workers' results arrive meanwhile.
+                    run_until(loop, [&] { return std::chrono::steady_clock::now() >= next; });
+                    if (std::chrono::steady_clock::now() > next + frame_time) {
+                        ++late;
+                    }
+                    frame();
+                    glReadPixels(0, 0, buffer_width, buffer_height, GL_RGBA, GL_UNSIGNED_BYTE,
+                                 pixels.data());
+                    ++written;
+                    write_ppm((frames_dir / std::format("frame-{:05}.ppm", written)).string(),
+                              buffer_width, buffer_height, pixels);
+                    next += frame_time;
+                };
+                std::string_view steps{record};
+                while (!steps.empty()) {
+                    const std::size_t comma = std::min(steps.find(','), steps.size());
+                    const std::string_view step = steps.substr(0, comma);
+                    steps.remove_prefix(std::min(comma + 1, steps.size()));
+                    if (step.starts_with("wait=")) {
+                        const int ms = std::stoi(std::string{step.substr(5)});
+                        for (int i = 0; i < (ms * 30 + 999) / 1000; ++i) {
+                            shoot();
+                        }
+                        continue;
+                    }
+                    std::string letters;
+                    if (step.starts_with("type=")) {
+                        for (const char letter : step.substr(5)) {
+                            letters += letters.empty() ? "" : ",";
+                            letters += letter;
+                        }
+                    }
+                    for (const ui::KeyEvent& event : parse_keys(letters.empty() ? step : letters)) {
+                        columns->key(event, views::Browser::Clock::now());
+                    }
+                    shoot();
+                }
+                log::info("recorded {} frames into {} ({} late)", written, frames_dir.string(),
+                          late);
             }
             // What --bench scrolls: Quick Look's text page, the last column, or the grid.
             ui::Scroller* bench_scroller = nullptr;

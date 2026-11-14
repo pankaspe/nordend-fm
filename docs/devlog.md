@@ -4,6 +4,26 @@ Work log, newest first. Each entry: what was done, decisions, measurements, open
 
 ---
 
+## 2026-11-14 — A film at the top of the README
+
+**Done**
+- `nordend-snapshot --record SCRIPT --frames DIR`: after the keys, a short film; SCRIPT is
+  comma-separated steps (a key, `type=TEXT` for a word in one frame, `wait=MS`); a frame every
+  1/30 s of real time (animations as on screen, workers' results between frames), written as
+  PPMs; `write_ppm` now writes a frame in one call (30 a second, 0 late at 1280x720).
+- `docs/images/readme-demo.webp`: 15.2 s, 1280x720, 2.33 MB (animated WebP, ffmpeg
+  `libwebp_anim` quality 85): the author's Olympus raws from Valle Antrona in the columns, the
+  grid and Quick Look; the command palette to the details; Quick Look on a long C++ file; the
+  shortcuts card; in the author's Noctalia colours (`--gtk ~/.config/gtk-4.0/gtk.css`), a demo
+  home in the scratchpad (no bookmarks of his). It replaces every screenshot in the README; the
+  six `readme-*.webp` screenshots are removed.
+
+**Measured**
+- The same film at quality 75, 20 fps, in the default dark palette: 0.56 MB; the light theme
+  and the code page compress worse (2.33 MB at quality 85, 30 fps).
+
+---
+
 ## 2026-11-14 — Nordend 0.7.3
 
 **Done**

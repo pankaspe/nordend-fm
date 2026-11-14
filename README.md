@@ -18,9 +18,9 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/readme-columns.webp" alt="Nordend in a dark theme taken from Noctalia: one header with back and forward and the path, the sidebar running to the top with places, bookmarks and a disk, three tabs, six columns down a game project, and the info pane with a source file's coloured preview and its details" width="100%">
+  <img src="docs/images/readme-demo.webp" alt="Nordend at work in a light theme taken from Noctalia: the columns down a folder of Olympus raw photos with their preview and EXIF in the info pane; the grid of thumbnails; Quick Look on the photos one after the other; the command palette switching to the details; Quick Look on a long C++ file with syntax colours, scrolled a page at a time; the keyboard shortcuts card" width="100%">
   <br>
-  <sub>One header, the sidebar to the top, three tabs, the columns down a project, and a source file's preview in the info pane, all in the colours of the desktop's theme.</sub>
+  <sub>Fifteen seconds of Nordend: columns, grid, Quick Look on raw photos and on code, the command palette, the shortcuts card, in the colours of the desktop's theme.</sub>
 </p>
 
 > [!NOTE]
@@ -32,7 +32,6 @@
 ## Contents
 
 - [Why Nordend](#why-nordend)
-- [Screenshots](#screenshots)
 - [Features](#features)
 - [Install](#install) and [keep it current](#nordend-setup)
 - [Setting it up](#setting-it-up): [folders and a key](#folders-and-a-key),
@@ -56,33 +55,6 @@ animations come from its own renderer.
 - **Safe.** Files that come from outside are read in a small helper process caged by Nordend
   (seccomp and landlock: no files, no network, no programs): a broken or hostile file costs at
   most its preview. Nothing is overwritten without asking, nothing half-copied under a real name.
-
-## Screenshots
-
-<p align="center">
-  <img src="docs/images/readme-grid.webp" alt="Nordend's grid of raw photos from a mountain walk, one selected, with the info pane showing its preview, size, dimensions, camera, lens, exposure, focal length and more details" width="100%">
-  <br>
-  <sub>A folder of Olympus raw files in the grid: the previews their camera stored, upright, and the shot's EXIF in the info pane.</sub>
-</p>
-
-<p align="center">
-  <img src="docs/images/readme-chooser.webp" alt="Firefox's Save As dialog shown by Nordend over Firefox's window: the sidebar, the Documents folder in the grid, the info pane, and at the bottom the name field, Firefox's Web Page, complete choice, New Folder, Cancel and Save" width="75%">
-  <br>
-  <sub>Nordend as the Open and Save dialog of other applications, here Firefox's Save As, with the application's own choice in the bar.</sub>
-</p>
-
-<table>
-  <tr>
-    <td width="33%"><img src="docs/images/readme-palette.webp" alt="The command palette: a search field over a list of commands with their shortcuts"></td>
-    <td width="33%"><img src="docs/images/readme-find.webp" alt="Finding files: a search field over files and folders found under the folder"></td>
-    <td width="33%"><img src="docs/images/readme-menu.webp" alt="The context menu on empty space, with Sort By open on its submenu"></td>
-  </tr>
-  <tr>
-    <td align="center"><sub>The command palette, <kbd>Ctrl</kbd>+<kbd>K</kbd></sub></td>
-    <td align="center"><sub>Finding files, <kbd>Ctrl</kbd>+<kbd>F</kbd></sub></td>
-    <td align="center"><sub>The context menu and Sort By</sub></td>
-  </tr>
-</table>
 
 ## Features
 
