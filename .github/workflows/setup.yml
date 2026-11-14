@@ -77,7 +77,7 @@ jobs:
           command -v nordend nordend-setup
           nordend --version
           nordend-setup status
-          grep -rn 'FileChooser=nordend' /root/.config/xdg-desktop-portal/
+          grep -rn 'FileChooser=nordend' "$HOME/.config/xdg-desktop-portal/"
           cat /usr/local/share/nordend/install-record
       - name: Check (asks GitHub)
         run: nordend-setup check
@@ -97,7 +97,7 @@ jobs:
           for folder in /usr/local/share/nordend /usr/local/libexec/nordend; do
             if [ -e "$folder" ]; then echo "left: $folder"; left=1; fi
           done
-          if grep -rqs 'FileChooser=nordend' /root/.config/xdg-desktop-portal/; then
+          if grep -rqs 'FileChooser=nordend' "$HOME/.config/xdg-desktop-portal/"; then
             echo "left: the file chooser setting"; left=1
           fi
           test "$left" = 0
