@@ -25,66 +25,37 @@
 
 > [!NOTE]
 > **Nordend 0.7.3**, the latest release: **scrollbars you can take**. Every list's scrollbar
-> widens under the pointer and can be dragged, or clicked beside to jump there, in the columns,
-> the grid, the details and Quick Look's text pages. The keyboard shortcuts card now scrolls
-> when the window is too low for it (issue #12, thanks to llego). Young software, used every day
-> by its author. [Install it](#install) with nordend-setup, as a package on Void Linux, or from
-> its flake on NixOS or with Nix.
+> widens under the pointer and can be dragged, or clicked beside to jump there; the keyboard
+> shortcuts card scrolls when the window is too low for it (issue #12, thanks to llego). Young
+> software, used every day by its author. [Install it](#install).
 
 ## Contents
 
 - [Why Nordend](#why-nordend)
 - [Screenshots](#screenshots)
 - [Features](#features)
-- [At a glance](#at-a-glance)
-- [Benchmarks](#benchmarks)
-- [Install](#install): any distribution, Void Linux, NixOS and Nix, from source;
-  [nordend-setup's commands](#nordend-setup), [then](#then),
-  [as the file chooser of other applications](#as-the-file-chooser-of-other-applications),
-  [colours](#colours)
+- [Install](#install) and [keep it current](#nordend-setup)
+- [Setting it up](#setting-it-up): [folders and a key](#folders-and-a-key),
+  [the file chooser](#as-the-file-chooser-of-other-applications), [colours](#colours),
+  [configuration](#configuration)
+- [Numbers](#numbers)
 - [Versions](#versions)
 - [What's next](#whats-next)
-- [Documentation](#documentation)
-- [Development](#development)
-- [License](#license)
+- [Documentation](#documentation) · [Development](#development) · [License](#license)
 
 ## Why Nordend
 
 Nordend talks to the compositor directly, with **no toolkit at all**: text, icons, scrolling and
-animations come from its own renderer. It follows your theme by itself, as GTK apps do: the
-colours in your GTK settings (what Noctalia, Stylix or matugen write there), else the desktop's
-light or dark style and accent, live ([Colours](#colours)).
+animations come from its own renderer.
 
-- **Fast.** The first frame in about 75 ms, the first entries of a 10 000-file folder in under
-  1 ms, a raw photo in Quick Look at once as its thumbnail and sharp in about 100 ms. Every
-  figure is measured, with the tool to measure it again.
-- **Light.** A 3.6 MB binary, 17 libraries, about 24 MB of memory, and no CPU at all while
-  nothing moves.
-- **Safe with what it reads.** Files that come from outside are read by `nordend-preview`, a
-  small helper process in a cage of Nordend's own (seccomp and landlock: no files, no network,
-  no programs). A broken or hostile file costs at most its preview; Nordend carries on.
-- **Its own readers.** TIFF (LZW, Deflate, PackBits, JPEG, tiles, BigTIFF), PGM and PPM are
-  read by code written for Nordend, checked pixel for pixel against libtiff and fuzzed; PNG, JPEG
-  and GIF by [wuffs](https://github.com/google/wuffs), memory-safe by construction. Raw files
-  show the JPEG their camera stored, so the camera's own rendering; a DNG whose stored previews
-  are too small is developed by Nordend's own reader, with the file's own colour.
-- **Photos and their editors.** Thumbnails, the info pane and Quick Look with the shot's EXIF;
-  darktable sidecars travel with their photo through every rename, copy, move and
-  trip to the trash.
-- **Three views of the same folder.** Columns, a thumbnail grid and a details table
-  (<kbd>Ctrl</kbd>+<kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd>); switching keeps your place and your
-  selection. Sort by name, size, date or type from the context menu, in every view.
-- **Tabs.** <kbd>Ctrl</kbd>+<kbd>T</kbd>, or a middle click on a folder to open it behind the
-  one you are in; each tab keeps its folder, view and history, and they all come back at the next
-  start.
-- **Careful with your files.** Nothing overwritten without asking, nothing half-copied under a
-  real name, a real freedesktop trash, and <kbd>Ctrl</kbd>+<kbd>Z</kbd>.
-- **Also your Open and Save dialog.** Other applications can choose and save files through
-  Nordend, with its views and thumbnails ([how](#as-the-file-chooser-of-other-applications)).
-- **Keyboard first, mouse always.** Every action has a key (<kbd>F1</kbd> lists them) and a click.
-
-Everything it does is in [docs/features.md](docs/features.md); inside Nordend, <kbd>F1</kbd> lists
-every shortcut.
+- **At home on your desktop.** It follows your theme by itself, as GTK apps do, live; it can be
+  the Open and Save dialog of other applications; every action has a key and a click.
+- **Fast.** The first frame in about 75 ms; a raw photo in Quick Look at once, sharp in about
+  100 ms. Every figure is measured, with the tool to measure it again ([Numbers](#numbers)).
+- **Light.** A 3.6 MB binary, about 24 MB of memory, no CPU at all while nothing moves.
+- **Safe.** Files that come from outside are read in a small helper process caged by Nordend
+  (seccomp and landlock: no files, no network, no programs): a broken or hostile file costs at
+  most its preview. Nothing is overwritten without asking, nothing half-copied under a real name.
 
 ## Screenshots
 
@@ -97,7 +68,7 @@ every shortcut.
 <p align="center">
   <img src="docs/images/readme-chooser.webp" alt="Firefox's Save As dialog shown by Nordend over Firefox's window: the sidebar, the Documents folder in the grid, the info pane, and at the bottom the name field, Firefox's Web Page, complete choice, New Folder, Cancel and Save" width="75%">
   <br>
-  <sub>New in 0.7.0: Nordend as the Open and Save dialog of other applications, here Firefox's Save As, with the application's own choice in the bar.</sub>
+  <sub>Nordend as the Open and Save dialog of other applications, here Firefox's Save As, with the application's own choice in the bar.</sub>
 </p>
 
 <table>
@@ -115,61 +86,51 @@ every shortcut.
 
 ## Features
 
-- **Views:** columns, thumbnail grid, details table; tabs; zoom; sort by name, size, date or type
-- **Quick Look** (<kbd>Space</kbd>): photos fill the window, raw files included; text files on a
-  scrollable page; the arrows walk the folder
-- **Raw files:** the previews cameras embed in ORF, CR2, NEF, ARW, RAF, RW2, SRW, DNG, 3FR
-  (found by Nordend's own reader), upright and cropped to the shot; DNGs with only a small
-  preview (Leica, drones) developed by Nordend itself; EXIF in the info pane
-- **Images:** PNG, JPEG, GIF (wuffs), WebP, JPEG XL, and TIFF, PGM and PPM with Nordend's own
-  readers; thumbnails in the shared freedesktop cache
-- **Isolated reading:** every picture is made in a caged helper process, never in Nordend
-- **darktable:** sidecars follow their photo everywhere
-- **Command palette** (<kbd>Ctrl</kbd>+<kbd>K</kbd>): every command, place and tab, fuzzy-matched
+**Browsing**
+- Three views of the same folder: columns, a thumbnail grid, a details table
+  (<kbd>Ctrl</kbd>+<kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd>); switching keeps your place and your
+  selection; zoom; sort by name, size, date or type
+- Tabs (<kbd>Ctrl</kbd>+<kbd>T</kbd>, or a middle click on a folder), each with its folder, view
+  and history, all back at the next start
+- Command palette (<kbd>Ctrl</kbd>+<kbd>K</kbd>): every command, place and tab, fuzzy-matched
   (fzy), the recently used first
-- **Find files** (<kbd>Ctrl</kbd>+<kbd>F</kbd>): fuzzy search of every file under the folder,
-  first results in milliseconds even among 270 000; Enter shows it, Space opens Quick Look
-- **Files:** copy and move with progress and conflict questions, rename, new folder or file
-  from templates, undo and redo, freedesktop trash with restore, delete permanently
-- **Drag and drop** within Nordend and with other apps; rubber-band selection; the system
-  clipboard
-- **Sidebar:** places, GTK bookmarks (renamed, pointed elsewhere and reordered in place), disks
+- Find files (<kbd>Ctrl</kbd>+<kbd>F</kbd>): fuzzy search of every file under the folder, first
+  results in milliseconds even among 270 000
+- Sidebar: places, GTK bookmarks (renamed, pointed elsewhere and reordered in place), disks
   through udisks2 (mount, unmount, eject)
-- **File chooser** of other applications (the desktop portal's): open and save with Nordend's
+- Folders follow changes on disk (inotify); history with <kbd>Alt</kbd>+<kbd>←</kbd>
+  <kbd>→</kbd> and the mouse's side buttons
+- Keyboard first, mouse always: <kbd>F1</kbd> lists every shortcut
+
+**Photos and previews**
+- Quick Look (<kbd>Space</kbd>): photos fill the window, raw files included; text files on a
+  scrollable page with syntax colours, to select and copy; the arrows walk the folder
+- Raw files: the previews cameras embed in ORF, CR2, NEF, ARW, RAF, RW2, SRW, DNG, 3FR, found by
+  Nordend's own reader, upright and cropped to the shot; DNGs with only a small preview (Leica,
+  drones) developed by Nordend itself, with the file's own colour; EXIF in the info pane
+- Images: PNG, JPEG, GIF ([wuffs](https://github.com/google/wuffs), memory-safe by
+  construction), WebP, JPEG XL; TIFF, PGM and PPM with Nordend's own readers, checked pixel for
+  pixel against libtiff and fuzzed; thumbnails in the shared freedesktop cache
+- darktable sidecars travel with their photo through every rename, copy, move and trip to the
+  trash
+
+**Files**
+- Copy and move with progress and conflict questions, rename, new folder or file from
+  templates, undo and redo (<kbd>Ctrl</kbd>+<kbd>Z</kbd>), a real freedesktop trash with
+  restore, delete permanently
+- Drag and drop within Nordend and with other apps; rubber-band selection; the system clipboard
+
+**On your desktop**
+- The file chooser of other applications (the desktop portal's): open and save with Nordend's
   views, thumbnails and Quick Look, the application's filters and choices
-- **Opening:** default applications and "Open With", resolved exactly as GLib does; a terminal
-  in any folder (<kbd>F4</kbd>), the one you choose in `config.toml`
-- **Always current:** folders follow changes on disk (inotify); history with
-  <kbd>Alt</kbd>+<kbd>←</kbd> <kbd>→</kbd> and the mouse's side buttons
-- **Looks:** your theme's colours live, read like a GTK app reads them (Noctalia, Stylix,
-  matugen, a hand-made `gtk.css`), or the desktop's light/dark style and accent (GNOME, Plasma);
-  its icon follows the accent; fractional scaling; one header, as in a modern file manager:
-  the sidebar to the top, the path and the window's buttons in one row
-- **Remembers** views, order, tabs and window size; a short `config.toml`, reloaded live
+- Default applications and "Open With", resolved exactly as GLib does; a terminal in any folder
+  (<kbd>F4</kbd>), the one you choose in `config.toml`
+- Your theme's colours, live (Noctalia, Stylix, matugen, a hand-made `gtk.css`), or the
+  desktop's light/dark style and accent (GNOME, Plasma); the icon follows the accent; fractional
+  scaling; one header with the sidebar to the top, the path and the window's buttons
+- Remembers views, order, tabs and window size; a short `config.toml`, reloaded live
 
-## At a glance
-
-| | |
-|---|---|
-| Binary | **4.34 MB** (3.61 MB stripped), x86-64; the decoders and text readers in `nordend-preview`, 1.15 MB (1.03 stripped), a separate caged helper; the file chooser's service `nordend-portal`, 0.36 MB (0.29 stripped), started only when an application asks |
-| Libraries | 17 direct (the helper and the service: 8 each); no GTK, no Qt, no GLib |
-| Code | about 56 900 lines of C++20, 20 700 of tests (489 test cases, under ASan and TSan too) |
-| Memory | **24 MB** of its own at start; pictures are decoded in the helpers, which give their memory back after a quiet second |
-| Idle | **0 CPU**: nothing is drawn while nothing moves |
-
-## Benchmarks
-
-The design's four targets (Ryzen 7 5700G, RX 6650 XT, SATA SSD), measured again on 2026-11-13
-where the date says so:
-
-| Target | Measured |
-|--------|---------:|
-| Cold start to the first frame on screen: < 150 ms | **128 ms** (2026-11-01); warm **76 ms** (2026-11-13) |
-| A 10 000-file folder: first frame < 50 ms | first entries in **0.8 ms**, all in **19 ms** (2026-11-13) |
-| Quick Look of an ORF raw photo: < 100 ms | **110 ms** for a portrait shot, median **about 102** over 18 photos (2026-11-14, from 144 ms): **nearly met**; the thumbnail shows in 20 ms |
-| Scrolling with no dropped frame | worst frame **3.7 ms** of 13.3 (75 Hz) (2026-11-01) |
-
-Every measurement and its method is in [docs/benchmarks.md](docs/benchmarks.md).
+Everything it does, area by area: [docs/features.md](docs/features.md).
 
 ## Install
 
@@ -308,10 +269,14 @@ opened folders before, in `~/.local/state/nordend-setup/settings`; nothing else.
 `~/.cache/nordend-setup` and empties it afterwards. A Nordend installed by a package manager or
 Nix is left to it: nordend-setup stops rather than install a second copy.
 
-### Then
+## Setting it up
 
-With nordend-setup, `nordend-setup configure` does what follows. By hand: make it the default
-for folders (a browser's "Show in folder", `xdg-open`) and give it a key:
+With nordend-setup, `nordend-setup configure` does the first two for you.
+
+### Folders and a key
+
+Make Nordend the default for folders (a browser's "Show in folder", `xdg-open`) and give it a
+key:
 
 ```sh
 xdg-mime default nordend.desktop inode/directory
@@ -350,62 +315,67 @@ its GTK theming (the built-in `gtk4` and `gtk3` templates); Stylix, matugen, or 
 `gtk.css`. Without them, Nordend takes the desktop's light or dark style and accent, where its
 portal offers them (GNOME, Plasma), else its own default palette.
 
-Configuration: every key, with its default, in [docs/config.example.toml](docs/config.example.toml)
-(copy it to `~/.config/nordend/config.toml`; `nordend --check-config` reports any problem). The
-command line: `nordend [DIR]`, `--config FILE`, `--version`, `--about` (what Nordend runs on,
-for a bug report), and `--set-file-chooser` / `--unset-file-chooser`.
+### Configuration
+
+Every key, with its default, is in [docs/config.example.toml](docs/config.example.toml): copy it
+to `~/.config/nordend/config.toml`; `nordend --check-config` reports any problem. The command
+line: `nordend [DIR]`, `--config FILE`, `--version`, `--about` (what Nordend runs on, for a bug
+report), and `--set-file-chooser` / `--unset-file-chooser`.
+
+## Numbers
+
+| | |
+|---|---|
+| Binary | **4.34 MB** (3.61 MB stripped), x86-64; the decoders and text readers in `nordend-preview`, 1.15 MB (1.03 stripped), a separate caged helper; the file chooser's service `nordend-portal`, 0.36 MB (0.29 stripped), started only when an application asks |
+| Libraries | 17 direct (the helper and the service: 8 each); no GTK, no Qt, no GLib |
+| Code | about 56 900 lines of C++20, 20 700 of tests (489 test cases, under ASan and TSan too) |
+| Memory | **24 MB** of its own at start; pictures are decoded in the helpers, which give their memory back after a quiet second |
+| Idle | **0 CPU**: nothing is drawn while nothing moves |
+
+The design's four targets (Ryzen 7 5700G, RX 6650 XT, SATA SSD), measured again on 2026-11-13
+where the date says so:
+
+| Target | Measured |
+|--------|---------:|
+| Cold start to the first frame on screen: < 150 ms | **128 ms** (2026-11-01); warm **76 ms** (2026-11-13) |
+| A 10 000-file folder: first frame < 50 ms | first entries in **0.8 ms**, all in **19 ms** (2026-11-13) |
+| Quick Look of an ORF raw photo: < 100 ms | **110 ms** for a portrait shot, median **about 102** over 18 photos (2026-11-14, from 144 ms): **nearly met**; the thumbnail shows in 20 ms |
+| Scrolling with no dropped frame | worst frame **3.7 ms** of 13.3 (75 Hz) (2026-11-01) |
+
+Every measurement and its method is in [docs/benchmarks.md](docs/benchmarks.md).
 
 ## Versions
 
-Nordend stays at 0.x while it is young. A new **minor** version (0.2.0, 0.3.0…) brings features
-you can see; a **patch** (0.2.1) only fixes things. 1.0.0 will come once Nordend has been its
-author's everyday file manager for a while and its files (`config.toml`, `state.toml`) have
-settled.
+Nordend stays at 0.x while it is young: a new **minor** version (0.7.0) brings features you can
+see, a **patch** (0.7.1) only fixes things. 1.0.0 will come once Nordend has been its author's
+everyday file manager for a while and its files (`config.toml`, `state.toml`) have settled. The
+latest three; every release is in [CHANGELOG.md](CHANGELOG.md):
 
 | Version | What it brought |
 |---|---|
 | [0.7.3](https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.3), 2026-11-14 | Scrollbars that widen under the pointer and can be dragged, or clicked on their track, in every list and on Quick Look's text pages; the keyboard shortcuts card scrolls in a low window, from llego's issue |
-| [0.7.2](https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.2), 2026-11-14 | nordend-setup: install Nordend from its source on any distribution (apt, dnf, pacman, zypper, xbps), with the build dependencies shown and installed, into `/usr/local` or `~/.local`; `check` and `update` to keep it current with the same choices, `configure` for the file chooser and folders, `status`, and `uninstall` removing every file it installed and giving the settings back; tried in CI on Debian 13, Ubuntu 26.04, Fedora 43, Arch and openSUSE Tumbleweed |
-| [0.7.1](https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.1), 2026-11-14 | Quick Look of a raw photo from 144 to 110 ms on screen (median about 102), and grid thumbnails made faster: the image scaler rewritten (twice as fast, the very same pixels), portrait photos made to fit the screen instead of 78 % larger; the sidebar's bookmarks renamed, pointed to another folder (Nordend's own folder chooser) and moved up or down, from their menu or with F2 and Alt+↑/↓, from Evergaster's issue |
-| [0.7.0](https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.0), 2026-11-14 | Nordend as the file chooser of other applications, through the desktop portal: open files or folders with its views, thumbnails and Quick Look, the application's filters and choices, saving with New Folder and a question before replacing, over the application's window on GNOME and Plasma; `nordend --set-file-chooser` and `--unset-file-chooser`; a small `nordend-portal` service that D-Bus starts when an application asks, one chooser window per request |
-| [0.6.2](https://github.com/pankaspe/nordend-fm/releases/tag/v0.6.2), 2026-11-13 | Copy the shown folder's path (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>, "Copy Path" on empty space and in the command palette); the terminal chosen in `config.toml` (`[terminal] program` and `args`, live), before `$TERMINAL`, for Open in Terminal and terminal apps; both from Evergaster's issue |
-| [0.6.1](https://github.com/pankaspe/nordend-fm/releases/tag/v0.6.1), 2026-11-13 | Rounded corners and a soft shadow around Nordend's own header, as GTK draws them (square with `[window] corner_radius = 0`); the shadow's edge resizes the window; a see-through background with solid text, icons and pictures (`[window] background_opacity`, by barrulus); a clean exit at logout, with the session's tabs and views saved, when the session bus goes first (GNOME) |
-| [0.6.0](https://github.com/pankaspe/nordend-fm/releases/tag/v0.6.0), 2026-11-13 | Colours from your theme with nothing to set up, read as GTK apps read them (Noctalia, Stylix, matugen, your own `gtk.css`), live; one header, as in a modern file manager: the sidebar to the top, back and forward, the path and the window's buttons in one row (`[window] title_bar = "compositor"` for the compositor's bar), tried on Umbriel, GNOME and Plasma |
-| [0.5.1](https://github.com/pankaspe/nordend-fm/releases/tag/v0.5.1), 2026-11-13 | Grid thumbnails up to 512 px, sharp from the larger caches (icons stay at 256); builds hardened on every system (stack protection, full RELRO, `_FORTIFY_SOURCE=3`, the standard library's index checks); a Nix flake, built and tested in Nix's sandbox on every push; sorting by type puts a file whose name has several types (`.md` with shared-mime-info 2.5) among its likely type |
-| [0.5.0](https://github.com/pankaspe/nordend-fm/releases/tag/v0.5.0), 2026-11-09 | Text previews: text files in Quick Look and the info pane, read in the caged helper (UTF-8, UTF-16, Latin-1) with syntax colours from your theme for C, C++, Rust, Python, JavaScript, TypeScript, Lua, Luau, shell (heredocs included), fish, CMake, Makefiles, JSON, TOML, YAML, INI files and desktop entries, `.gitignore` and `.gitattributes`, Markdown (code blocks in their own language) and diffs; select with the pointer, Ctrl+A, Ctrl+C; long lines scroll sideways; Home, End, Page Up and Page Down; a caption with the language, encoding and line ends; minified files shown plain; logs opened at their newest lines. The helper became the first engine, described by a manifest |
-| [0.4.0](https://github.com/pankaspe/nordend-fm/releases/tag/v0.4.0), 2026-11-08 | Image previews read by Nordend's own code: DNG developed when its previews are too small (Leica M240 and M8, DJI drones, Adobe-converted files) with the file's colour, tone curve, vignetting and lens corrections, read identically to LibRaw and 2-4 times faster; TIFF with its own reader (BigTIFF, LZW, Deflate, PackBits, JPEG, 8/16-bit and float, CMYK, tiles, a scanner's scan in a SubIFD); raw files' previews and the info pane's EXIF without exiv2 (the same results, 3 to 100 times quicker); pictures made in small `nordend-preview` processes, each in a cage of Nordend's own (seccomp and landlock), so a file that crashes or hangs one costs only its preview; one path for every picture, told by the file's bytes; a plain sentence when a file cannot be shown. Canon CRW and Minolta MRW get that sentence; darktable sidecars' ratings are no longer read (Nordend's own ratings come next) |
-| [0.3.1](https://github.com/pankaspe/nordend-fm/releases/tag/v0.3.1), 2026-11-07 | Fixes: DNG previews stored as a JPEG inside a TIFF (Leica M240, Samsung GX20 at full size), broken previews passed over for the next one (Samsung SRW), PGM and PPM images, a plain message for raw formats with no readable preview (Sigma X3F, old Panasonic RAW) |
-| [0.3.0](https://github.com/pankaspe/nordend-fm/releases/tag/v0.3.0), 2026-11-06 | The command palette (<kbd>Ctrl</kbd>+<kbd>K</kbd>, fuzzy matching with fzy); finding files under a folder (<kbd>Ctrl</kbd>+<kbd>F</kbd>); Nordend's icon follows the desktop's accent colour (`icon.follow_accent`) |
-| [0.2.0](https://github.com/pankaspe/nordend-fm/releases/tag/v0.2.0), 2026-11-06 | Sort By in the context menu; tabs (a folder, a view, a history and a zoom each, remembered); zoom in the columns and the details |
-| [0.1.0](https://github.com/pankaspe/nordend-fm/releases/tag/v0.1.0), 2026-11-06 | The first release: three views, raw previews and Quick Look, file operations with undo, trash, drag and drop, disks, the desktop's look |
+| [0.7.2](https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.2), 2026-11-14 | nordend-setup: install Nordend from its source on any distribution, keep it current with `check` and `update`, set it up with `configure`, remove it with `uninstall`; tried in CI on Debian 13, Ubuntu 26.04, Fedora 43, Arch and openSUSE Tumbleweed |
+| [0.7.1](https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.1), 2026-11-14 | Quick Look of a raw photo from 144 to 110 ms on screen, grid thumbnails faster (the image scaler rewritten); the sidebar's bookmarks renamed, pointed elsewhere and reordered, from Evergaster's issue |
 
 ## What's next
 
 Nordend stays what it is: a native C++ file manager, at home on any Wayland desktop and right at
 home on Noctalia, with no GTK or Qt; very light, safe and fast. Everything else is a feature on
-top, added only when it keeps those three.
+top, added only when it keeps those three. Coming, roughly in this order:
 
-0.1.0 came out after a week of daily use by the author; 0.2.0 added Sort By, tabs and zoom in the
-lists; 0.3.0 the command palette (<kbd>Ctrl</kbd>+<kbd>K</kbd>) and finding files
-(<kbd>Ctrl</kbd>+<kbd>F</kbd>); 0.3.1 more raw previews; 0.4.0 image previews read by Nordend's own
-code in caged helpers; 0.5.0 text previews with syntax colours, selecting and copying; 0.5.1
-grid thumbnails up to 512 px, hardened builds and a Nix flake; 0.6.0 the colours of your theme
-with nothing to set up and one header for the whole window; 0.6.1 rounded corners and a shadow
-around it, square corners or a see-through background on request; 0.6.2 copying the folder's
-path and choosing the terminal; 0.7.0 Nordend as the file chooser of other applications;
-0.7.1 sharper photos sooner and bookmarks renamed and reordered; 0.7.2 nordend-setup, to
-install and update it on any distribution; 0.7.3 scrollbars you can drag.
-Coming, roughly in this order: **network shares** in the sidebar (Samba, SFTP, FTP, WebDAV,
-through gvfs when it runs); then **previews, one family at a time**: other common formats one by one (SVG, AVIF, fonts,
-archive contents, audio tags).
-After that: colour labels and star ratings of your own, not tied to any raw editor; a Quick Look
-for photographers (100 % zoom, EXIF, histogram, comparison); a dual pane, a queue of operations
-and batch renaming; translations, plugins in Luau (one system, each plugin caged, for things
-outside Nordend such as local AI search).
+- **Network shares** in the sidebar (Samba, SFTP, FTP, WebDAV, through gvfs when it runs)
+- **Previews, one family at a time**: other common formats one by one (SVG, AVIF, fonts,
+  archive contents, audio tags)
+- Colour labels and star ratings of your own, not tied to any raw editor
+- A Quick Look for photographers: 100 % zoom, EXIF, histogram, comparison
+- A dual pane, a queue of operations and batch renaming
+- Translations; plugins in Luau (one system, each plugin caged, for things outside Nordend such
+  as local AI search)
 
 ## Documentation
 
 [Features](docs/features.md) ·
+[Changelog](CHANGELOG.md) ·
 [Devlog](docs/devlog.md) ·
 [Benchmarks](docs/benchmarks.md) ·
 [Compatibility](docs/compatibility.md) ·
