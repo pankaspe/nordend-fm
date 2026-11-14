@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cerrno>
+#include <chrono>
 #include <csignal>
 #include <cstdint>
 #include <cstring>
@@ -320,10 +321,16 @@ Helpers::Outcome Helpers::exchange(Helper helper, std::span<const std::byte> req
 bool Helpers::run(std::span<const std::byte> request, std::span<const int> fds,
                   const std::function<bool(protocol::Packet&, std::string&)>& accept,
                   std::string& why) {
+    using Clock = std::chrono::steady_clock;
+    const auto ms = [](Clock::time_point from, Clock::time_point to) {
+        return std::chrono::duration<double, std::milli>(to - from).count();
+    };
     why = "the preview helper could not start";
     // Twice at most: a helper that had just left gets the request again in a new one.
     for (int attempt = 0; attempt < 2; ++attempt) {
+        const Clock::time_point asked = Clock::now();
         const std::optional<Helper> helper = take();
+        const Clock::time_point taken = Clock::now();
         if (!helper) {
             why = options_.program.empty()
                       ? "nordend-preview not found"
@@ -333,8 +340,12 @@ bool Helpers::run(std::span<const std::byte> request, std::span<const int> fds,
         protocol::Packet reply;
         Outcome outcome = exchange(*helper, request, fds, reply, why);
         if (outcome == Outcome::done) {
+            const Clock::time_point answered = Clock::now();
             const bool accepted = accept(reply, why);
             reply.close_fds();
+            log::trace("helper {}: taken in {:.1f} ms, answered in {:.1f} ms, read in {:.1f} ms",
+                       helper->pid, ms(asked, taken), ms(taken, answered),
+                       ms(answered, Clock::now()));
             if (accepted) {
                 give_back(*helper);
                 return true;

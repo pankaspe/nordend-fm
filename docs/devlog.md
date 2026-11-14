@@ -4,6 +4,51 @@ Work log, newest first. Each entry: what was done, decisions, measurements, open
 
 ---
 
+## 2026-11-14 — Quick Look of an ORF: where the time went, a faster scaler, portraits fitted
+
+**Tested by the author** (2026-11-14, on screen, Umbriel, `build/nordend` with
+`NORDEND_LOG=trace`): before, `_4230010.ORF` 144.1 ms with its stages traced; after, a full-screen
+window, 18 photos by Space and the arrows: every one upright and sharp, 80.1-116.8 ms (median
+about 102), `_4230010.ORF` 109.5 ms.
+
+**Measured** (details and method in benchmarks.md, "Quick Look of an ORF, stage by stage")
+- Before, on screen: preview 1.4, decode 45.2, **scale 38.8**, turn 7.3, memfd 5.7 (helper 98.4),
+  pixels copied 10.3, waited to be drawn 12.9, **uploaded 13.5**, shown 2.2. Neither the queue
+  (0.0) nor the neighbours (offscreen, with and without) cost anything measurable.
+- The scaler built without hardening: 33 ms instead of 44 (`_GLIBCXX_ASSERTIONS` in its indexed
+  loops).
+- The 2026-11-07 "1920x1440 ORF in 64 ms" was a landscape photo with scale and turn counted in
+  "decode": not comparable.
+
+**Done**
+- Trace timings, kept: `picture::Loaded::Stages` (filled by `image::load`), written by
+  `nordend-preview` on stderr with `NORDEND_LOG=trace`; `Helpers::run` logs the wait for a helper,
+  the round trip and the reading at trace; Quick Look writes one debug line when the frame with a
+  sharp picture is shown (`QuickLook::frame_shown`, from the window's frame callback, now hooked
+  whenever debug is on), stage by stage; a neighbour made in advance says only that it was ready.
+  `NORDEND_QUICK_LOOK_NEIGHBOURS=0` leaves the neighbours out, for measurements.
+- `picture::scale_to_fit` rewritten for speed, same bytes: `Taps` (one table of weights),
+  pointer loops, SSE2 for a pixel's four channels and for the final conversion (with the plain
+  loops on other processors), opaque halving by `(s + 2) / 4`. 3200x2400 to 1920x1440 43.7 ->
+  20.8 ms; thumbnails 20.5 -> 12-14 ms.
+- `image::load` turns the box with the picture: orientations 5-8 are scaled into the box's
+  height by width, so the upright picture fits it (a portrait ORF was made 1440x1920 for a
+  2560x1440 box, now 1080x1440).
+- Tests (478): `tests/scale_test.cpp` (the old scaler kept as the reference, 18 cases, opaque and
+  not, halving and plain area, byte for byte), a quarter-turned JPEG fitting its box upright.
+
+**Open**
+- On screen it is about the 100 ms target, not under it every time. Left for later: uploading
+  on arrival (0-16 ms waiting for the next draw), uploading from the memfd without a copy (about
+  5 ms), scaling straight into the memfd.
+- `nordend-decode` crashes on `--help` (an unknown file name thrown out of `file_size`), and says
+  "unknown" for an ORF although its comment says raw files show their preview: a development
+  tool's slips, to fix.
+- A portrait DNG is developed into the box as stored before `load` turns it; the final scale now
+  fits it, but the development may make more pixels than needed (*to be verified*).
+
+---
+
 ## 2026-11-14 — Nordend 0.7.0
 
 A minor release with ROADMAP step 4: Nordend as the file chooser of other applications

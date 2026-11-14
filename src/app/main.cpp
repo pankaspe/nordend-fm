@@ -965,8 +965,16 @@ int main(int argc, char** argv) {
         bool first_shown = false;
         bool ready_drawn = false;
         bool ready_shown = false;
-        if (startup.active()) {
+        // Each frame the compositor shows: start timing, and Quick Look's debug line saying when
+        // a sharp image reached the screen.
+        if (startup.active() || log::enabled(log::Level::debug)) {
             window.set_frame_shown_handler([&] {
+                if (columns && columns->quick_look().is_open()) {
+                    columns->quick_look().frame_shown(views::QuickLook::Clock::now());
+                }
+                if (!startup.active()) {
+                    return;
+                }
                 if (first_drawn && !first_shown) {
                     first_shown = true;
                     startup.mark("first-frame-shown");

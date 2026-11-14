@@ -3,7 +3,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <format>
+#include <string_view>
 #include <unordered_set>
 #include <variant>
 #include <xkbcommon/xkbcommon-keysyms.h>
@@ -73,7 +75,11 @@ QuickLook::QuickLook(core::WorkerPool& pool, std::shared_ptr<const fs::MimeDatab
     : pool_{pool},
       mime_{std::move(mime)},
       thumbnails_{std::move(thumbnails)},
-      redraw_{std::move(redraw)} {}
+      redraw_{std::move(redraw)} {
+    const char* neighbours = std::getenv(  // NOLINT(concurrency-mt-unsafe): at startup
+        "NORDEND_QUICK_LOOK_NEIGHBOURS");
+    neighbours_ = neighbours == nullptr || std::string_view{neighbours} != "0";
+}
 
 QuickLook::~QuickLook() {
     *alive_ = false;
@@ -135,6 +141,13 @@ QuickLook::Slot& QuickLook::ensure(const fs::Entry& entry, bool current) {
     if (!slot.content && !slot.content_job) {
         slot.requested = Clock::now();
         slot.in_advance = !current;
+
+        struct Made {
+            std::shared_ptr<preview::Content> content;
+            Clock::time_point started;
+            Clock::time_point made;
+        };
+
         slot.content_job = pool_.submit(
             current ? core::Priority::visible : core::Priority::nearby,
             [&provider,
@@ -142,9 +155,12 @@ QuickLook::Slot& QuickLook::ensure(const fs::Entry& entry, bool current) {
                                         .mime = std::string{mime_->name(folder_->mime_of(entry))},
                                         .width = target_width_,
                                         .height = target_height_}](const core::CancelToken& token) {
-                return std::make_shared<preview::Content>(provider.load(request, token));
+                const Clock::time_point started = Clock::now();
+                auto content = std::make_shared<preview::Content>(provider.load(request, token));
+                return Made{
+                    .content = std::move(content), .started = started, .made = Clock::now()};
             },
-            [this, alive = alive_, key](std::shared_ptr<preview::Content> content) {
+            [this, alive = alive_, key](Made made) {
                 if (!*alive) {
                     return;
                 }
@@ -152,8 +168,12 @@ QuickLook::Slot& QuickLook::ensure(const fs::Entry& entry, bool current) {
                 if (it == slots_.end()) {
                     return;
                 }
-                it->second.content_job.reset();
-                it->second.content = std::move(content);
+                Slot& arrived = it->second;
+                arrived.content_job.reset();
+                arrived.content = std::move(made.content);
+                arrived.started = made.started;
+                arrived.made = made.made;
+                arrived.delivered = Clock::now();
                 redraw_();
             });
     }
@@ -217,7 +237,7 @@ void QuickLook::follow(std::shared_ptr<Folder> folder) {
     ensure(*entry, true);
     // The neighbours, so that the next arrow finds them ready.
     for (const std::size_t neighbour : {index - 1, index + 1}) {
-        if (neighbour < entries.size()) {
+        if (neighbours_ && neighbour < entries.size()) {
             ensure(entries[neighbour], false);
             keep.insert(key_of(entries[neighbour]));
         }
@@ -232,6 +252,37 @@ void QuickLook::follow(std::shared_ptr<Folder> folder) {
     }
     if (moved) {
         redraw_();
+    }
+}
+
+void QuickLook::frame_shown(Clock::time_point now) {
+    if (!log::enabled(log::Level::debug)) {
+        return;
+    }
+    const auto ms = [](Clock::time_point from, Clock::time_point to) {
+        return std::chrono::duration<double, std::milli>(to - from).count();
+    };
+    for (auto& [key, slot] : slots_) {
+        if (slot.shown_logged || key != shown_key_) {
+            continue;  // a neighbour's image is not on screen until the arrow moves to it
+        }
+        slot.shown_logged = true;
+        if (slot.in_advance) {
+            // Made before the arrow reached it: its wait is the user's, not Nordend's.
+            log::debug(
+                "quick look: {} on screen at once, made in advance as a neighbour (made in "
+                "{:.1f} ms, uploaded in {:.1f})",
+                slot.path.filename().string(), ms(slot.started, slot.made), slot.upload_ms);
+            continue;
+        }
+        log::debug(
+            "quick look: {} on screen {:.1f} ms after it was asked for: queued {:.1f}, "
+            "made {:.1f}, delivered {:.1f}, waited to be drawn {:.1f}, uploaded {:.1f}, "
+            "shown {:.1f}",
+            slot.path.filename().string(), ms(slot.requested, now),
+            ms(slot.requested, slot.started), ms(slot.started, slot.made),
+            ms(slot.made, slot.delivered), ms(slot.delivered, slot.drawn) - slot.upload_ms,
+            slot.upload_ms, ms(slot.drawn, now));
     }
 }
 
@@ -442,10 +493,14 @@ void QuickLook::draw_image(ui::Renderer& renderer, const ui::Rect& area,
     // Upload what arrived: the sharp image replaces the thumbnail. The pixels are on the GPU now:
     // they go (the size stays, for the caption).
     if (loaded != nullptr && !loaded->image.empty() && !slot.image_texture) {
+        const Clock::time_point uploading = Clock::now();
         slot.image_texture = std::make_unique<ui::Texture>(
             loaded->image.width, loaded->image.height, loaded->image.rgba);
         std::vector<std::uint8_t>{}.swap(loaded->image.rgba);
-        log::debug("quick look: {} {}x{} on screen {:.1f} ms after it was asked for{}", entry.name,
+        slot.upload_ms = since(uploading);
+        slot.drawn = Clock::now();
+        slot.shown_logged = false;  // written by frame_shown(), with the whole path
+        log::debug("quick look: {} {}x{} drawn {:.1f} ms after it was asked for{}", entry.name,
                    loaded->image.width, loaded->image.height, since(slot.requested),
                    slot.in_advance ? " (made in advance, as a neighbour)" : "");
         if (slot.thumbnail_texture) {

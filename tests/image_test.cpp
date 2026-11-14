@@ -138,6 +138,20 @@ TEST_CASE("image: the EXIF orientation of a JPEG turns the pixels, unless asked 
     check_blocks(stored.image, 6, false);
 }
 
+TEST_CASE("image: a picture turned a quarter fits the box once upright") {
+    // Stored 48x32, upright 32x48: into 40x24 it is 16x24 (not 24x36, the stored picture scaled
+    // into the box and then turned, taller than the box).
+    const picture::Loaded loaded =
+        image::load({.path = kData / "blocks-orient6.jpg", .max_width = 40, .max_height = 24});
+    REQUIRE(loaded.failure == picture::Failure::none);
+    CHECK(loaded.image.width == 16);
+    CHECK(loaded.image.height == 24);
+    // Upright, as before: white at the top left, blue at the bottom right.
+    CHECK(pixel(loaded.image, 4, 4).r > 200);
+    CHECK(pixel(loaded.image, 12, 20).b > 200);
+    CHECK(pixel(loaded.image, 12, 20).r < 60);
+}
+
 TEST_CASE("image: the eight orientations") {
     const Image picture = numbered(3, 2);  // 0 1 2 / 3 4 5
     const auto turned = [&](std::uint8_t orientation) {

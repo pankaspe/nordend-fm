@@ -70,6 +70,10 @@ public:
     // and down. False for other keys, or when no text page is shown.
     bool text_key(const ui::KeyEvent& event, Clock::time_point now);
 
+    // The compositor showed the last frame drawn (its frame callback): the debug log says when a
+    // sharp image reached the screen.
+    void frame_shown(Clock::time_point now);
+
     // A text page is shown (Ctrl+A and Ctrl+C are then its own).
     [[nodiscard]] bool shows_text() const { return shown_text() != nullptr; }
 
@@ -129,6 +133,15 @@ private:
         Clock::time_point requested;
         bool in_advance{false};
         bool thumbnail_logged{false};
+        // Where an image's time went, for the debug line written once it is on screen: its job
+        // started and finished on a worker, reached the loop thread, was uploaded (how long),
+        // was drawn; then the compositor's next frame callback.
+        Clock::time_point started;
+        Clock::time_point made;
+        Clock::time_point delivered;
+        Clock::time_point drawn;
+        double upload_ms{0.0};
+        bool shown_logged{true};  // false between the image's first draw and its frame shown
     };
 
     [[nodiscard]] const preview::Provider& provider_of(const fs::Entry& entry) const;
@@ -149,6 +162,8 @@ private:
     std::shared_ptr<const fs::MimeDatabase> mime_;
     std::shared_ptr<const thumbs::Cache> thumbnails_;
     std::function<void()> redraw_;
+    // NORDEND_QUICK_LOOK_NEIGHBOURS=0: neighbours are not made in advance (for measurements).
+    bool neighbours_{true};
 
     std::shared_ptr<Folder> folder_;  // nullptr: closed
     std::string shown_name_;

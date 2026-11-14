@@ -118,8 +118,8 @@ README's [What's next](../README.md#whats-next).
   damaged, or unreadable.
 - **Shared freedesktop thumbnail cache:** thumbnails go where GNOME, KDE and other apps look for
   them, byte-compatible, so they are made once for all of them. Files that fail are remembered.
-- **Quick Look** (Space): the photo fills the window, raw files included. An ORF fitted to a
-  2880x1620 screen takes 51-55 ms. The arrows walk the folder without closing it, and the next
+- **Quick Look** (Space): the photo fills the window, raw files included. An ORF's sharp picture is on
+  screen about 100 ms after Space (its thumbnail at once). The arrows walk the folder without closing it, and the next
   photo is already loading. Text files open on a page you can scroll, in your monospace font
   (darktable sidecars included), read in UTF-8, UTF-16 (with its byte order mark) or Latin-1
   (Windows-1252, for files from old editors: "caffè 3€" shows as written), with **syntax
@@ -433,7 +433,7 @@ README's [What's next](../README.md#whats-next).
 | The whole folder loaded and sorted (warm / cold) | 19.5 ms / 81 ms |
 | A scrolling frame at 2880x1620 (columns / grid / details) | 0.26 / 0.30 / 0.36-0.50 ms |
 | Sorting 10 000 entries by size, date or type | 1-3 ms |
-| Quick Look of an ORF on screen (its thumbnail at once) | 131 ms, over the 100 ms target: being looked into |
+| Quick Look of an ORF on screen (its thumbnail at once) | 80-117 ms, median about 102 (target 100) |
 | Reading every installed app to choose one | 0.5 ms |
 | Copying 342 photos, 3.1 GB, warm cache (Nordend / `cp -a`) | 1.39 s / 1.39 s |
 | CPU while nothing moves | 0 |

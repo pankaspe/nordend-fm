@@ -17,13 +17,69 @@ again. Newest results first in each section; the [devlog](devlog.md) tells the s
 
 ## DESIGN targets (ROADMAP 7.6)
 
+### 2026-11-14: Quick Look of an ORF, stage by stage
+
+Where an ORF's sharp picture spends its time, from the trace log this day added
+(`NORDEND_LOG=trace`: the helper writes preview, decode, scale, turn and memfd times on stderr;
+`Helpers` the wait for a helper, the round trip and the pixels' copy; Quick Look, at debug, one
+line once the compositor's frame callback says the picture is on screen: queued, made on the
+worker, delivered to the loop, waited to be drawn, uploaded, shown). `_4230010.ORF` (OM-1, a
+portrait shot; its stored preview 3200x2400, orientation 6).
+
+| Stage (ms) | before, on screen | scaler rewritten, offscreen | + portrait fix, offscreen | + portrait fix, on screen |
+|---|---:|---:|---:|---:|
+| shown at | 1440x1920 | 1440x1920 | 1080x1440 | 1080x1440 |
+| preview read | 1.4 | 1.2 | 1.2 | 1.5 |
+| JPEG decode (wuffs) | 45.2 | 46.6 | 48.0 | 47.6 |
+| scale | **38.8** | **20.8** | **18.0** | **18.2** |
+| turn | 7.3 | 9.7 | 1.1 | 1.2 |
+| memfd write | 5.7 | 5.3 | 3.0 | 3.0 |
+| in the helper | 98.4 | 87 | 75 | 74.7 |
+| made on the worker (helper, pixels copied) | 115.4 | | | 83.8 |
+| waited to be drawn / uploaded / shown | 12.9 / 13.5 / 2.2 | | | 9.8 / 7.7 / 8.2 |
+| **on screen after Space** | **144.1** | | | **109.5** |
+
+Before: the first column is the author's run on screen (Umbriel, 2560x1440, three seconds
+before each Space so the helper had given its memory back); offscreen columns are
+`nordend-snapshot --columns DIR --reveal FILE --keys space OUT 2560 1440 1`, five runs each,
+medians. Neighbours made at the same time cost nothing measurable
+(`NORDEND_QUICK_LOOK_NEIGHBOURS=0`: 147.6-150.1 against 150.0-153.8 ms, offscreen), nor did the
+queue (0.0 ms on screen).
+
+What changed:
+- **The scaler** (`picture::scale_to_fit`, also every thumbnail's): its weights in one flat table
+  instead of a vector for each output pixel, its inner loops on pointers, the four channels of a
+  pixel in one SSE2 operation, the float-to-byte step 16 at a time, and halving an opaque
+  picture with a shift instead of three divisions a pixel. Same bytes as before
+  (`tests/scale_test.cpp` checks it against the old code): 3200x2400 to 1920x1440 43.7 -> 20.8
+  ms, to a 384x512 thumbnail 20.6 -> 14 ms, to 192x256 20.5 -> 12.3 ms (thumbnail cache empty,
+  offscreen, three runs).
+- **The hardening's share:** `_GLIBCXX_ASSERTIONS` checked every index in the old loops; built
+  without hardening the old scaler took 33 ms instead of 44. The new loops do not index
+  containers, so the hardening stays on.
+- **Portrait photos** were scaled as stored and turned afterwards, into the upright box: a
+  3200x2400 preview with orientation 6 came out 1440x1920 for a 2560x1440 box, 78 % more pixels
+  than the 1080x1440 it fits. The box is now turned with the picture.
+
+On screen after both (the author, Umbriel, a full-screen window, 18 photos, Quick Look then the
+arrows): 80.1-116.8 ms, median about 102; `_4230010.ORF` 109.5 ms against 144.1 that morning.
+Photos read from the disk for the first time add up to 19 ms to the preview read, and the decode
+varies from 26 to 57 ms with the CPU's clock. Neighbours made in advance show at once.
+
+The 2026-11-07 figure (a 1920x1440 ORF in 64-65 ms through a running helper, "decode 54") is not
+comparable: it timed a landscape photo and counted scale and turn inside "decode".
+
+Left for later (ROADMAP): uploading the picture as soon as it arrives instead of at the next
+draw (0-16 ms of waiting), uploading straight from the helper's memfd instead of copying it first
+(about 5 ms), scaling straight into the memfd.
+
 ### 2026-11-13: checked again for the README (0.6.2)
 
 | Target | Measured | Verdict |
 |--------|----------|---------|
 | Start to the first frame (warm) | **76.0 ms** median of 10 (68.3-84.0), on screen, Umbriel; cold not measured again | met |
 | 10k-file folder | first entries **0.77 ms**, whole folder **19.1 ms** (`nordend-bench-dir --runs 20 build/bench-10k`, median of runs 2-20) | met |
-| Quick Look of an ORF | **131.2 ms** on screen for `_4230010.ORF` (1440x1920 shown), helpers already running; its thumbnail 18.3 ms | **not met** |
+| Quick Look of an ORF | **131.2 ms** on screen for `_4230010.ORF` (1440x1920 shown), helpers already running; its thumbnail 18.3 ms | **not met** (2026-11-14: 109.5 ms, median about 102, above) |
 | Scrolling | not measured again | — |
 
 Memory at start: Anonymous **23.5 MB** in the author's `~/nordend-rss.log` (0.6.2, 18:31), as

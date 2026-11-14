@@ -4,6 +4,7 @@
 #include <array>
 #include <atomic>
 #include <cerrno>
+#include <chrono>
 #include <fcntl.h>
 #include <mutex>
 #include <optional>
@@ -141,6 +142,11 @@ Loaded load(const LoadRequest& request) {
 }
 
 Loaded load(int fd, std::uint32_t max_width, std::uint32_t max_height) {
+    using Clock = std::chrono::steady_clock;
+    const auto ms = [](Clock::time_point from, Clock::time_point to) {
+        return std::chrono::duration<float, std::milli>(to - from).count();
+    };
+    const Clock::time_point started = Clock::now();
     const std::optional<detail::FdFile> file = detail::FdFile::of(fd);
     if (!file) {
         return failed(Failure::unreadable, "cannot read the file");
@@ -189,6 +195,7 @@ Loaded load(int fd, std::uint32_t max_width, std::uint32_t max_height) {
         preview_reads.fetch_add(1, std::memory_order_relaxed);
         preview = embedded_preview(fd, side);
     }
+    const Clock::time_point previewed = Clock::now();
     const auto from_preview = [&] {
         Decoded decoded = decode_preview(preview);
         if (!decoded.error.empty()) {
@@ -262,8 +269,22 @@ Loaded load(int fd, std::uint32_t max_width, std::uint32_t max_height) {
         std::swap(result.full_width, result.full_height);
     }
     result.detail.clear();
-    // Scaled first, turned after: the turn then works on screen-sized pixels.
-    result.image = apply_orientation(scale_to_fit(picture, max_width, max_height), orientation);
+    result.stages.decoded_width = picture.width;
+    result.stages.decoded_height = picture.height;
+    // Scaled first, turned after: the turn then works on screen-sized pixels. The box is the
+    // upright picture's, so a picture turned a quarter (orientations 5-8) is scaled into the box
+    // turned the same way (before 2026-11-14 a portrait photo came out 78 % larger than its box).
+    const Clock::time_point decoded = Clock::now();
+    const bool quarter_turn = orientation >= 5 && orientation <= 8;
+    Image scaled = scale_to_fit(picture, quarter_turn ? max_height : max_width,
+                                quarter_turn ? max_width : max_height);
+    const Clock::time_point scaled_at = Clock::now();
+    result.image = apply_orientation(std::move(scaled), orientation);
+    const Clock::time_point turned = Clock::now();
+    result.stages.preview_ms = ms(started, previewed);
+    result.stages.decode_ms = ms(previewed, decoded);
+    result.stages.scale_ms = ms(decoded, scaled_at);
+    result.stages.turn_ms = ms(scaled_at, turned);
     return result;
 }
 

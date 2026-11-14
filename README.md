@@ -12,7 +12,7 @@
   <a href="https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.0"><img src="https://img.shields.io/badge/release-v0.7.0-2a6a9e" alt="release v0.7.0"></a>
   <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white" alt="C++20">
   <img src="https://img.shields.io/badge/Wayland-native-FFBC00?logo=wayland&logoColor=black" alt="Wayland native">
-  <img src="https://img.shields.io/badge/tests-476%20%C2%B7%20ASan%20%C2%B7%20TSan-4B32C3" alt="476 tests, ASan, TSan">
+  <img src="https://img.shields.io/badge/tests-478%20%C2%B7%20ASan%20%C2%B7%20TSan-4B32C3" alt="478 tests, ASan, TSan">
   <a href="https://github.com/pankaspe/nordend-fm/actions/workflows/ci.yml"><img src="https://github.com/pankaspe/nordend-fm/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <img src="https://img.shields.io/badge/license-MIT-3DA639" alt="MIT license">
 </p>
@@ -42,7 +42,7 @@ colours in your GTK settings (what Noctalia, Stylix or matugen write there), els
 light or dark style and accent, live ([Colours](#colours)).
 
 - **Fast.** The first frame in about 75 ms, the first entries of a 10 000-file folder in under
-  1 ms, a raw photo in Quick Look at once as its thumbnail and sharp in about 130 ms. Every
+  1 ms, a raw photo in Quick Look at once as its thumbnail and sharp in about 100 ms. Every
   figure is measured, with the tool to measure it again.
 - **Light.** A 3.5 MB binary, 17 libraries, about 24 MB of memory, and no CPU at all while
   nothing moves.
@@ -138,7 +138,7 @@ every shortcut.
 |---|---|
 | Binary | **4.26 MB** (3.55 MB stripped), x86-64; the decoders and text readers in `nordend-preview`, 1.15 MB (1.03 stripped), a separate caged helper; the file chooser's service `nordend-portal`, 0.35 MB (0.28 stripped), started only when an application asks |
 | Libraries | 17 direct (the helper and the service: 8 each); no GTK, no Qt, no GLib |
-| Code | about 55 600 lines of C++20, 19 900 of tests (476 test cases, under ASan and TSan too) |
+| Code | about 55 600 lines of C++20, 19 900 of tests (478 test cases, under ASan and TSan too) |
 | Memory | **24 MB** of its own at start; pictures are decoded in the helpers, which give their memory back after a quiet second |
 | Idle | **0 CPU**: nothing is drawn while nothing moves |
 
@@ -151,7 +151,7 @@ where the date says so:
 |--------|---------:|
 | Cold start to the first frame on screen: < 150 ms | **128 ms** (2026-11-01); warm **76 ms** (2026-11-13) |
 | A 10 000-file folder: first frame < 50 ms | first entries in **0.8 ms**, all in **19 ms** (2026-11-13) |
-| Quick Look of an ORF raw photo: < 100 ms | **131 ms** (2026-11-13): **not met** since pictures are made in the caged helper (0.4.0; 82-96 ms before); the thumbnail shows in 20 ms. Being looked into |
+| Quick Look of an ORF raw photo: < 100 ms | **110 ms** for a portrait shot, median **about 102** over 18 photos (2026-11-14, from 144 ms): **nearly met**; the thumbnail shows in 20 ms |
 | Scrolling with no dropped frame | worst frame **3.7 ms** of 13.3 (75 Hz) (2026-11-01) |
 
 Every measurement and its method is in [docs/benchmarks.md](docs/benchmarks.md).

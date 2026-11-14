@@ -45,6 +45,17 @@ struct Loaded {
     Failure failure{Failure::none};
     std::string detail;  // the technical reason of a failure, for the log
 
+    // Where the time went, for the trace log: set where the picture is made, never sent between
+    // processes.
+    struct Stages {
+        float preview_ms{0};  // finding and reading a stored preview
+        float decode_ms{0};   // decoding (or developing) the picture used
+        float scale_ms{0};
+        float turn_ms{0};
+        std::uint32_t decoded_width{0};  // the picture as decoded, before scaling
+        std::uint32_t decoded_height{0};
+    } stages;
+
     [[nodiscard]] std::string_view error() const noexcept { return failure_message(failure); }
 };
 

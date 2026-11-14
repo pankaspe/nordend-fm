@@ -8,6 +8,7 @@
 #include <array>
 #include <cerrno>
 #include <charconv>
+#include <chrono>
 #include <csignal>
 #include <cstddef>
 #include <cstdint>
@@ -68,9 +69,14 @@ int sealed_memfd(const char* name, std::span<const std::byte> bytes) {
     return fd;
 }
 
-void answer_picture(int socket, int file, const protocol::Request& request) {
+// traced: this helper's pid, to write where the picture's time went on stderr
+// (NORDEND_LOG=trace); 0 when not tracing.
+void answer_picture(int socket, int file, const protocol::Request& request, int traced) {
+    using Clock = std::chrono::steady_clock;
+    const Clock::time_point started = Clock::now();
     const picture::Loaded loaded =
         nordend::formats::make_picture(file, request.max_width, request.max_height);
+    const Clock::time_point made = Clock::now();
     protocol::Response response;
     response.failure = static_cast<std::uint8_t>(loaded.failure);
     response.from_preview = loaded.from_preview ? 1 : 0;
@@ -91,12 +97,27 @@ void answer_picture(int socket, int file, const protocol::Request& request) {
     std::array<std::byte, sizeof(protocol::Response) + protocol::kMaxDetail> bytes{};
     std::memcpy(bytes.data(), &response, sizeof(response));
     std::memcpy(bytes.data() + sizeof(response), detail.data(), detail.size());
+    const Clock::time_point written = Clock::now();
     const std::array<int, 1> fds{pixels};
     static_cast<void>(
         protocol::send_packet(socket, std::span{bytes}.first(sizeof(response) + detail.size()),
                               pixels >= 0 ? std::span<const int>{fds} : std::span<const int>{}));
     if (pixels >= 0) {
         ::close(pixels);
+    }
+    if (traced != 0) {
+        const auto ms = [](Clock::time_point from, Clock::time_point to) {
+            return std::chrono::duration<double, std::milli>(to - from).count();
+        };
+        const picture::Loaded::Stages& stages = loaded.stages;
+        std::fprintf(stderr,
+                     "nordend-preview %d: picture %ux%u from %ux%u in %.1f ms: preview %.1f, "
+                     "decode %.1f, scale %.1f, turn %.1f, memfd %.1f\n",
+                     traced, loaded.image.width, loaded.image.height, stages.decoded_width,
+                     stages.decoded_height, ms(started, written),
+                     static_cast<double>(stages.preview_ms), static_cast<double>(stages.decode_ms),
+                     static_cast<double>(stages.scale_ms), static_cast<double>(stages.turn_ms),
+                     ms(made, written));
     }
 }
 
@@ -197,6 +218,11 @@ bool debug_log() {
            (std::string_view{level} == "debug" || std::string_view{level} == "trace");
 }
 
+bool trace_log() {
+    const char* level = std::getenv("NORDEND_LOG");  // NOLINT(concurrency-mt-unsafe): one thread
+    return level != nullptr && std::string_view{level} == "trace";
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -216,6 +242,7 @@ int main(int argc, char** argv) {
     std::signal(SIGPIPE, SIG_IGN);  // NOLINT(cert-err33-c): nothing to check
 
     const pid_t pid = ::getpid();  // asked now: getpid is not allowed in the cage
+    const int traced = trace_log() ? static_cast<int>(pid) : 0;
     warm_up();
     const char* report = std::getenv("NORDEND_SANDBOX_REPORT");  // NOLINT(concurrency-mt-unsafe)
     const bool reporting = report != nullptr && std::string_view{report} == "1";
@@ -286,7 +313,7 @@ int main(int argc, char** argv) {
             if (request.kind == protocol::Kind::photo_info) {
                 answer_photo_info(socket, file);
             } else if (request.kind == protocol::Kind::picture) {
-                answer_picture(socket, file, request);
+                answer_picture(socket, file, request, traced);
             } else {
                 understood = false;
             }
