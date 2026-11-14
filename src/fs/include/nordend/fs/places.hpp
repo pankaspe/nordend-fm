@@ -85,6 +85,26 @@ struct UserDir {
 [[nodiscard]] std::optional<std::string> remove_bookmark(std::string_view text,
                                                          const std::filesystem::path& folder);
 
+// The text with folder's bookmark called label: its URI kept as written, the label after it; an
+// empty label, or the folder's own name, leaves the line without one (the sidebar then shows the
+// folder's name). nullopt when folder has no bookmark. The other lines stay as they are.
+[[nodiscard]] std::optional<std::string> rename_bookmark(std::string_view text,
+                                                         const std::filesystem::path& folder,
+                                                         std::string_view label);
+
+// The text with from's bookmark pointing to to instead (its URI as GLib writes it), keeping its
+// label and its place; nullopt when from has none. The caller checks that to has none already.
+[[nodiscard]] std::optional<std::string> repoint_bookmark(std::string_view text,
+                                                          const std::filesystem::path& from,
+                                                          const std::filesystem::path& to);
+
+// The text with folder's bookmark swapped with the shown bookmark before it (step -1) or after it
+// (+1); lines the sidebar does not show (sftp://, blank) stay where they are. nullopt when folder
+// has none or is already first (last).
+[[nodiscard]] std::optional<std::string> move_bookmark(std::string_view text,
+                                                       const std::filesystem::path& folder,
+                                                       int step);
+
 // The mount points in /proc/self/mountinfo's text under /run/media, /media and /mnt: where
 // removable and data disks land. Octal escapes (\040 for a space) decoded.
 [[nodiscard]] std::vector<Place> parse_mounts(std::string_view text);

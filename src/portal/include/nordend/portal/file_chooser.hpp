@@ -18,6 +18,7 @@
 #include "nordend/core/event_loop.hpp"
 #include "nordend/fs/file_filter.hpp"
 #include "nordend/platform/bus_loop.hpp"
+#include "nordend/platform/program_output.hpp"
 
 // Nordend as the desktop's file chooser (ROADMAP 4): the backend xdg-desktop-portal asks when an
 // application wants a file. The service (nordend-portal) answers on the session bus and starts one
@@ -97,7 +98,7 @@ struct PickResult {
 // SIGTERM of a closed request, a cancel; anything else (an error exit, a crash) "other".
 [[nodiscard]] PickResult pick_result(std::string_view output, int wait_status);
 
-// One picker process: its standard output read as it comes, its end followed by a pidfd.
+// One picker process (platform::ProgramOutput), its output read as a PickResult.
 // Loop thread only.
 class Picker {
 public:
@@ -118,19 +119,10 @@ public:
     void stop();
 
 private:
-    void read_output();
-    void finish();
-    void close_fds();
+    void ended(const std::string& output, int wait_status);
 
-    core::EventLoop& loop_;
     Done done_;
-    pid_t pid_{-1};
-    int output_{-1};
-    int pidfd_{-1};
-    core::EventLoop::SourceId output_source_{0};
-    core::EventLoop::SourceId exit_source_{0};
-    core::EventLoop::SourceId kill_timer_{0};
-    std::string received_;
+    platform::ProgramOutput program_;
 };
 
 // org.freedesktop.impl.portal.FileChooser on connection at kObjectPath: OpenFile starts a picker

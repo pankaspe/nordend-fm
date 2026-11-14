@@ -5,6 +5,8 @@
 #include <functional>
 #include <optional>
 #include <span>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -15,6 +17,7 @@
 #include "nordend/ui/renderer.hpp"
 #include "nordend/ui/scroller.hpp"
 #include "nordend/ui/seat.hpp"
+#include "nordend/ui/text_field.hpp"
 
 namespace nordend::views {
 
@@ -114,6 +117,42 @@ public:
     // A drag over that zone: a line shows where the bookmarks would go (after the last one).
     void set_bookmark_drop(bool shown);
 
+    // Bookmarks edited from the sidebar: renamed (an empty label gives the folder's name back),
+    // moved one shown bookmark up (step -1) or down (+1).
+    using RenameHandler =
+        std::function<void(const std::filesystem::path& folder, const std::string& label)>;
+    using MoveHandler = std::function<void(const std::filesystem::path& folder, int step)>;
+
+    void set_rename_handler(RenameHandler rename) { rename_ = std::move(rename); }
+
+    void set_move_handler(MoveHandler move) { move_ = std::move(move); }
+
+    // A text field over the label of folder's bookmark, its label selected. Enter or a press
+    // elsewhere confirms, Escape cancels. Nothing when folder is not a bookmark.
+    void start_rename(const std::filesystem::path& folder);
+
+    [[nodiscard]] bool renaming() const noexcept { return renaming_.has_value(); }
+
+    // While renaming every key is the field's (true).
+    bool rename_key(const ui::KeyEvent& event);
+
+    // While renaming: a press in the field is the field's (true); elsewhere it confirms and
+    // returns false, so the press goes on to what is under it.
+    bool rename_pointer(const ui::PointerEvent& event);
+
+    // Text pasted into the field (its first line, control characters left out).
+    void paste(std::string_view text);
+
+    void confirm_rename();
+    void cancel_rename();
+
+    // F2 (rename) and Alt+Up, Alt+Down (move) on the bookmark under the cursor, while focused.
+    // True for these keys even off a bookmark: they are the sidebar's, never the view's.
+    bool edit_key(const ui::KeyEvent& event);
+
+    // The cursor on the place at path, when it is listed (a bookmark pointed elsewhere).
+    void set_cursor_to(const std::filesystem::path& path);
+
 private:
     struct Row {
         float top{0.0F};                   // content coordinates
@@ -156,6 +195,11 @@ private:
     };
 
     std::optional<Drag> drag_;
+    RenameHandler rename_;
+    MoveHandler move_;
+    ui::TextField field_;                            // the label being edited
+    std::optional<std::filesystem::path> renaming_;  // whose bookmark
+    std::string renaming_from_;                      // its label when the edit began
     bool over_edge_{false};
     float pointer_x_{0.0F};
     float pointer_y_{0.0F};

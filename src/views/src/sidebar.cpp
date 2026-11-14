@@ -89,6 +89,11 @@ void Sidebar::set_places(std::vector<fs::Place> places) {
     if (focused_ && !cursor_ && !places_.empty()) {
         cursor_ = 0;
     }
+    if (renaming_ && std::ranges::none_of(places_, [&](const fs::Place& place) {
+            return place.section == fs::Place::Section::bookmarks && place.path == *renaming_;
+        })) {
+        renaming_.reset();  // gone meanwhile (another program changed the bookmarks)
+    }
     hovered_.reset();
     current_.reset();
     layout();
@@ -163,7 +168,10 @@ void Sidebar::draw(ui::Renderer& renderer, const ui::Rect& bounds, const theme::
         }
         const std::size_t i = *row.place;
         const fs::Place& place = places_[i];
-        const bool is_cursor = focused_ && cursor_ == i;
+        // The label being edited: its field on a quiet row, not on the cursor's colour.
+        const bool editing =
+            renaming_ && place.section == fs::Place::Section::bookmarks && place.path == *renaming_;
+        const bool is_cursor = focused_ && cursor_ == i && !editing;
         const bool is_current = current_ == i;
         std::optional<ui::Color> fill;
         // A disk not mounted is quieter until a click mounts it.
@@ -201,6 +209,18 @@ void Sidebar::draw(ui::Renderer& renderer, const ui::Rect& bounds, const theme::
             icons.draw(renderer, "player-eject", eject.x, eject.y, kEjectSize,
                        hovered_eject_ == i ? icon : text.with_alpha(0.7F));
             text_room -= kEjectSize + 8.0F;
+        }
+        if (editing) {
+            field_.draw(renderer,
+                        {bounds.x + kTextLeft - 6.0F, y + 3.0F, std::max(1.0F, text_room + 6.0F),
+                         kRowHeight - 6.0F},
+                        kTextSize,
+                        {.background = palette.surface_container_highest,
+                         .border = palette.primary,
+                         .text = palette.on_surface,
+                         .selection = palette.secondary_container,
+                         .caret = palette.on_surface});
+            continue;
         }
         renderer.draw_text(place.label, bounds.x + kTextLeft, y + 8.0F, kTextSize, text,
                            std::max(1.0F, text_room), ui::Ellipsis::middle);
@@ -410,6 +430,117 @@ void Sidebar::pointer(const ui::PointerEvent& event, Clock::time_point now) {
                 update_hover();
             }
             break;
+    }
+}
+
+void Sidebar::start_rename(const std::filesystem::path& folder) {
+    const auto it = std::ranges::find_if(places_, [&](const fs::Place& place) {
+        return place.section == fs::Place::Section::bookmarks && place.path == folder;
+    });
+    if (it == places_.end()) {
+        return;
+    }
+    renaming_ = folder;
+    renaming_from_ = it->label;
+    field_.set_text(it->label);
+    field_.select_all();
+    redraw_();
+}
+
+bool Sidebar::rename_key(const ui::KeyEvent& event) {
+    if (!renaming_) {
+        return false;
+    }
+    const bool plain = !event.modifiers.ctrl && !event.modifiers.alt;
+    if (plain && (event.keysym == XKB_KEY_Return || event.keysym == XKB_KEY_KP_Enter)) {
+        confirm_rename();
+    } else if (plain && event.keysym == XKB_KEY_Escape) {
+        cancel_rename();
+    } else if (field_.key(event)) {
+        redraw_();
+    }
+    return true;
+}
+
+bool Sidebar::rename_pointer(const ui::PointerEvent& event) {
+    if (!renaming_ || event.kind != ui::PointerEvent::Kind::press) {
+        return false;
+    }
+    const ui::Rect& box = field_.bounds();
+    const bool inside =
+        event.x >= box.x && event.x < box.right() && event.y >= box.y && event.y < box.bottom();
+    if (inside && event.button == ui::PointerButton::left) {
+        if (event.click_count >= 2) {
+            field_.select_all();
+        } else {
+            field_.click(event.x, event.modifiers.shift);
+        }
+        redraw_();
+        return true;
+    }
+    confirm_rename();
+    return false;
+}
+
+void Sidebar::paste(std::string_view text) {
+    if (!renaming_) {
+        return;
+    }
+    std::string line;
+    for (const char c : text.substr(0, text.find_first_of("\r\n"))) {
+        if (static_cast<unsigned char>(c) >= 0x20U && c != 0x7F) {
+            line.push_back(c);
+        }
+    }
+    field_.insert(line);
+    redraw_();
+}
+
+void Sidebar::confirm_rename() {
+    if (!renaming_) {
+        return;
+    }
+    const std::filesystem::path folder = *renaming_;
+    const std::string label = field_.text();
+    renaming_.reset();
+    redraw_();
+    if (label != renaming_from_ && rename_) {
+        rename_(folder, label);
+    }
+}
+
+void Sidebar::cancel_rename() {
+    if (renaming_) {
+        renaming_.reset();
+        redraw_();
+    }
+}
+
+bool Sidebar::edit_key(const ui::KeyEvent& event) {
+    const bool rename = event.keysym == XKB_KEY_F2 && event.modifiers == ui::Modifiers{};
+    const bool move = (event.keysym == XKB_KEY_Up || event.keysym == XKB_KEY_Down) &&
+                      event.modifiers == ui::Modifiers{.alt = true};
+    if (!focused_ || (!rename && !move)) {
+        return false;
+    }
+    if (!cursor_ || *cursor_ >= places_.size() ||
+        places_[*cursor_].section != fs::Place::Section::bookmarks) {
+        return true;  // nothing to edit here, and nothing for the view either
+    }
+    const std::filesystem::path folder = places_[*cursor_].path;
+    if (rename) {
+        start_rename(folder);
+    } else if (move_) {
+        move_(folder, event.keysym == XKB_KEY_Up ? -1 : 1);
+    }
+    return true;
+}
+
+void Sidebar::set_cursor_to(const std::filesystem::path& path) {
+    const auto it = std::ranges::find(places_, path, &fs::Place::path);
+    if (it != places_.end()) {
+        cursor_ = static_cast<std::size_t>(it - places_.begin());
+        redraw_();
     }
 }
 

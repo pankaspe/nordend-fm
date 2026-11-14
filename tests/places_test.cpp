@@ -142,6 +142,69 @@ TEST_CASE("bookmarks: added at the end as GLib writes them, removed, the rest ke
     CHECK(nordend::fs::add_bookmark("", "/a") == std::optional<std::string>{"file:///a\n"});
 }
 
+TEST_CASE("bookmarks: renamed, the URI as written and the other lines kept") {
+    const std::string text =
+        "sftp://host/home/me Remote\n"
+        "file:///run/media/me/DATA/fotografia Photos\n"
+        "file:///tmp/with%20space";  // no newline at the end
+    CHECK(nordend::fs::rename_bookmark(text, "/tmp/with space/", "  Two words, naïve ") ==
+          std::optional<std::string>{"sftp://host/home/me Remote\n"
+                                     "file:///run/media/me/DATA/fotografia Photos\n"
+                                     "file:///tmp/with%20space Two words, naïve"});
+    // Empty, or the folder's own name: no label, the sidebar shows the name.
+    const std::string plain =
+        "sftp://host/home/me Remote\n"
+        "file:///run/media/me/DATA/fotografia\n"
+        "file:///tmp/with%20space";
+    CHECK(nordend::fs::rename_bookmark(text, "/run/media/me/DATA/fotografia", "") ==
+          std::optional<std::string>{plain});
+    CHECK(nordend::fs::rename_bookmark(text, "/run/media/me/DATA/fotografia", "fotografia") ==
+          std::optional<std::string>{plain});
+    // One line, whatever was typed.
+    CHECK(nordend::fs::rename_bookmark("file:///a\n", "/a", "x\ny\tz") ==
+          std::optional<std::string>{"file:///a x y z\n"});
+    CHECK(nordend::fs::parse_bookmarks(
+              nordend::fs::rename_bookmark(text, "/tmp/with space", "Spaced").value_or(""))
+              .back()
+              .label == "Spaced");
+    CHECK_FALSE(nordend::fs::rename_bookmark(text, "/elsewhere", "x"));
+}
+
+TEST_CASE("bookmarks: pointed elsewhere, keeping the label and the place") {
+    const std::string text = "file:///a Alpha\nfile:///b\nfile:///c\n";
+    CHECK(nordend::fs::repoint_bookmark(text, "/a", "/home/me/naïve 2026/") ==
+          std::optional<std::string>{
+              "file:///home/me/na%C3%AFve%202026 Alpha\nfile:///b\nfile:///c\n"});
+    CHECK(nordend::fs::repoint_bookmark(text, "/b/", "/z") ==
+          std::optional<std::string>{"file:///a Alpha\nfile:///z\nfile:///c\n"});
+    CHECK_FALSE(nordend::fs::repoint_bookmark(text, "/elsewhere", "/z"));
+}
+
+TEST_CASE("bookmarks: moved among the shown ones, the others staying put") {
+    const std::string text =
+        "file:///a\n"
+        "sftp://host/x Remote\n"
+        "file:///b Bee\n"
+        "\n"
+        "file:///c";
+    CHECK(nordend::fs::move_bookmark(text, "/b", -1) ==
+          std::optional<std::string>{"file:///b Bee\n"
+                                     "sftp://host/x Remote\n"
+                                     "file:///a\n"
+                                     "\n"
+                                     "file:///c"});
+    CHECK(nordend::fs::move_bookmark(text, "/b", 1) ==
+          std::optional<std::string>{"file:///a\n"
+                                     "sftp://host/x Remote\n"
+                                     "file:///c\n"
+                                     "\n"
+                                     "file:///b Bee"});
+    CHECK_FALSE(nordend::fs::move_bookmark(text, "/a", -1));  // first already
+    CHECK_FALSE(nordend::fs::move_bookmark(text, "/c", 1));   // last already
+    CHECK_FALSE(nordend::fs::move_bookmark(text, "/elsewhere", 1));
+    CHECK_FALSE(nordend::fs::move_bookmark(text, "/a", 0));
+}
+
 TEST_CASE("bookmarks: written all at once, the folder made, the permissions kept") {
     const TempDir dir;
     const std::filesystem::path file = dir.path / "config" / "gtk-3.0" / "bookmarks";

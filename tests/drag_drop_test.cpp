@@ -699,8 +699,137 @@ TEST_CASE("sidebar bookmarks: folders dropped below the places are added; files 
         }
     }
     REQUIRE(f.browser.context_menu().is_open());
-    REQUIRE(f.browser.context_menu().items().size() == 1);
-    CHECK(f.browser.context_menu().items().front().id == "remove_bookmark");
+    // No folder chooser set: no "Choose Folder…". The only bookmark is first and last.
+    const auto& items = f.browser.context_menu().items();
+    REQUIRE(items.size() == 4);
+    CHECK(items[0].id == "rename_bookmark");
+    CHECK(items[1].id == "move_bookmark_up");
+    CHECK_FALSE(items[1].enabled);
+    CHECK(items[2].id == "move_bookmark_down");
+    CHECK_FALSE(items[2].enabled);
+    CHECK(items[3].id == "remove_bookmark");
+
+    // With a folder chooser: "Choose Folder…" starts it in the bookmark's folder, and the folder
+    // chosen replaces it.
+    f.browser.context_menu().close();
+    std::optional<fs::path> asked;
+    f.browser.set_folder_chooser(
+        [&](const fs::path& start, const std::function<void(fs::path)>& chosen) {
+            asked = start;
+            chosen(f.album);
+        });
+    const nordend::fs::Place* bookmark = nullptr;
+    float bookmark_y = 0.0F;
+    for (float y = 0.0F; y < kHeight && bookmark == nullptr; y += 3.0F) {
+        const nordend::fs::Place* place = f.browser.sidebar().place_under(40.0F, y);
+        if (place != nullptr && place->section == nordend::fs::Place::Section::bookmarks) {
+            bookmark = place;
+            bookmark_y = y;
+        }
+    }
+    REQUIRE(bookmark != nullptr);
+    const fs::path was = bookmark->path;
+    f.browser.pointer({.kind = PointerEvent::Kind::press,
+                       .x = 40.0F,
+                       .y = bookmark_y,
+                       .button = PointerButton::right,
+                       .click_count = 1},
+                      Browser::Clock::now());
+    REQUIRE(f.browser.context_menu().is_open());
+    const auto& with_chooser = f.browser.context_menu().items();
+    REQUIRE(with_chooser.size() == 5);
+    REQUIRE(with_chooser[1].id == "choose_bookmark_folder");
+    const std::function<void()> choose = with_chooser[1].action;
+    f.browser.context_menu().close();
+    choose();
+    REQUIRE(run_until(f.loop, [&f] { return !f.browser.loading(); }));
+    CHECK(asked == was);
+    CHECK(nordend::core::read_text_file(f.bookmarks).text ==
+          nordend::core::file_uri(f.album) + "\n");
+}
+
+TEST_CASE("sidebar bookmarks: renamed with F2, moved with Alt+arrows, pointed elsewhere") {
+    Fixture f;
+    f.browser.open(f.root);
+    f.browser.set_mode(Browser::Mode::details);
+    REQUIRE(run_until(f.loop, [&] { return !f.browser.loading(); }));
+    f.browser.add_to_sidebar({f.root, f.photos});
+    REQUIRE(run_until(f.loop, [&] { return !f.browser.loading(); }));
+    const auto bookmarks = [&f] { return nordend::core::read_text_file(f.bookmarks).text; };
+    const auto settle = [&f] { REQUIRE(run_until(f.loop, [&f] { return !f.browser.loading(); })); };
+    const std::string root_line = nordend::core::file_uri(f.root);
+    const std::string photos_line = nordend::core::file_uri(f.photos);
+    REQUIRE(bookmarks() == root_line + "\n" + photos_line + "\n");
+
+    // Into the sidebar, onto the photos' bookmark; F2 opens the field, Enter confirms.
+    CHECK(f.browser.key(key(XKB_KEY_F6), Browser::Clock::now()));
+    REQUIRE(f.browser.sidebar().focused());
+    f.browser.sidebar().set_cursor_to(f.photos);
+    CHECK(f.browser.key(key(XKB_KEY_F2), Browser::Clock::now()));
+    REQUIRE(f.browser.sidebar().renaming());
+    CHECK_FALSE(f.browser.name_editor().active());  // the view's rename did not start
+    f.browser.sidebar().paste("Pictures");          // over the label, all selected
+    CHECK(f.browser.key(key(XKB_KEY_Return), Browser::Clock::now()));
+    CHECK_FALSE(f.browser.sidebar().renaming());
+    settle();
+    CHECK(bookmarks() == root_line + "\n" + photos_line + " Pictures\n");
+    CHECK(f.browser.status_bar().message() == "Renamed “Pictures” in the sidebar");
+
+    // Escape leaves the label as it was; nothing is written.
+    const int reloads = f.reloads;
+    CHECK(f.browser.key(key(XKB_KEY_F2), Browser::Clock::now()));
+    f.browser.sidebar().paste("Something else");
+    CHECK(f.browser.key(key(XKB_KEY_Escape), Browser::Clock::now()));
+    settle();
+    CHECK_FALSE(f.browser.sidebar().renaming());
+    CHECK(f.browser.sidebar().focused());
+    CHECK(f.reloads == reloads);
+
+    // Alt+Up moves it above the root's; the cursor follows it; first already: nothing more.
+    CHECK(f.browser.key(key(XKB_KEY_Up, {.alt = true}), Browser::Clock::now()));
+    settle();
+    CHECK(bookmarks() == photos_line + " Pictures\n" + root_line + "\n");
+    const auto cursor_path = [&f] {
+        const auto& places = f.browser.sidebar().places();
+        const std::optional<std::size_t> at = f.browser.sidebar().cursor();
+        return at && *at < places.size() ? places[*at].path : fs::path{};
+    };
+    CHECK(cursor_path() == f.photos);
+    CHECK(f.browser.key(key(XKB_KEY_Up, {.alt = true}), Browser::Clock::now()));
+    settle();
+    CHECK(bookmarks() == photos_line + " Pictures\n" + root_line + "\n");
+    CHECK(f.browser.key(key(XKB_KEY_Down, {.alt = true}), Browser::Clock::now()));
+    settle();
+    CHECK(bookmarks() == root_line + "\n" + photos_line + " Pictures\n");
+
+    // Off a bookmark (the Album place): F2 and Alt+Up are the sidebar's, and do nothing.
+    f.browser.sidebar().set_cursor_to(f.album);
+    CHECK(f.browser.key(key(XKB_KEY_F2), Browser::Clock::now()));
+    CHECK_FALSE(f.browser.sidebar().renaming());
+    CHECK_FALSE(f.browser.name_editor().active());
+    CHECK(f.browser.key(key(XKB_KEY_Up, {.alt = true}), Browser::Clock::now()));
+    settle();
+    CHECK(bookmarks() == root_line + "\n" + photos_line + " Pictures\n");
+
+    // Pointed to the album: same label, same place; the cursor goes with it.
+    f.browser.sidebar().set_cursor_to(f.photos);
+    f.browser.repoint_bookmark(f.photos, f.album);
+    settle();
+    CHECK(bookmarks() == root_line + "\n" + nordend::core::file_uri(f.album) + " Pictures\n");
+    CHECK(f.browser.status_bar().message() == "The bookmark now opens “album”");
+    // To a folder with a bookmark already, or to a file: refused.
+    f.browser.repoint_bookmark(f.album, f.root);
+    settle();
+    CHECK(f.browser.status_bar().message() == "Already in the sidebar");
+    f.browser.repoint_bookmark(f.album, f.photos / "P1.ORF");
+    settle();
+    CHECK(f.browser.status_bar().message() == "Only folders go in the sidebar");
+    CHECK(bookmarks() == root_line + "\n" + nordend::core::file_uri(f.album) + " Pictures\n");
+
+    // An empty label gives the folder's own name back.
+    f.browser.rename_bookmark(f.album, "");
+    settle();
+    CHECK(bookmarks() == root_line + "\n" + nordend::core::file_uri(f.album) + "\n");
 }
 
 TEST_CASE("sidebar disks: a click on the eject icon ejects; the right click offers the rest") {

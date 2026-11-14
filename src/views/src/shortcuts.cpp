@@ -406,6 +406,17 @@ constexpr std::array kShortcuts{
              .action = "Back to the view",
              .scope = scope::kSidebar,
              .keysyms = {XKB_KEY_Escape}},
+    Shortcut{.group = "Sidebar",
+             .keys = "F2",
+             .action = "Rename a bookmark",
+             .scope = scope::kSidebar,
+             .keysyms = {XKB_KEY_F2}},
+    Shortcut{.group = "Sidebar",
+             .keys = "Alt+↑  Alt+↓",
+             .action = "Move a bookmark up, down",
+             .scope = scope::kSidebar,
+             .modifiers = kAlt,
+             .keysyms = {XKB_KEY_Up, XKB_KEY_Down}},
 
     // Quick Look
     Shortcut{.group = "Quick Look",

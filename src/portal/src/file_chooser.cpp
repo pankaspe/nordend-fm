@@ -6,12 +6,7 @@
 #include <charconv>
 #include <csignal>
 #include <cstring>
-#include <fcntl.h>
 #include <optional>
-#include <poll.h>
-#include <spawn.h>
-#include <sys/syscall.h>
-#include <sys/wait.h>
 #include <system_error>
 #include <tuple>
 #include <unistd.h>
@@ -19,22 +14,8 @@
 
 #include "nordend/core/log.hpp"
 
-extern char** environ;  // NOLINT(readability-redundant-declaration): for posix_spawn
-
 namespace nordend::portal {
 namespace {
-
-// More than any choice of files prints: a picker past it is not listened to any further.
-constexpr std::size_t kMaxOutput = std::size_t{16} << 20U;
-// A picker asked to close that has not after this is killed.
-constexpr std::chrono::milliseconds kStopGrace{3000};
-
-// pidfd calls by number: <sys/pidfd.h> is missing or not C++-ready on some systems.
-int open_pidfd(pid_t pid) { return static_cast<int>(syscall(SYS_pidfd_open, pid, 0U)); }
-
-void signal_pidfd(int pidfd, int signal) {
-    syscall(SYS_pidfd_send_signal, pidfd, signal, nullptr, 0U);
-}
 
 template <typename T>
 std::optional<T> option(const Options& options, const char* name) {
@@ -248,154 +229,25 @@ PickResult pick_result(std::string_view output, int wait_status) {
 // ---------------------------------------------------------------------------------------------
 // Picker
 
-Picker::Picker(core::EventLoop& loop, Done done) : loop_{loop}, done_{std::move(done)} {}
+Picker::Picker(core::EventLoop& loop, Done done)
+    : done_{std::move(done)}, program_{loop, [this](const std::string& output, int wait_status) {
+                                           ended(output, wait_status);
+                                       }} {}
 
-Picker::~Picker() {
-    if (pid_ > 0) {
-        kill(pid_, SIGKILL);
-        int status = 0;
-        while (waitpid(pid_, &status, 0) < 0 && errno == EINTR) {
-        }
-    }
-    close_fds();
+void Picker::ended(const std::string& output, int wait_status) {
+    // done may end this picker: nothing of it is touched after.
+    const Done chosen = std::move(done_);
+    chosen(pick_result(output, wait_status));
 }
+
+Picker::~Picker() = default;
 
 bool Picker::start(const std::filesystem::path& program,
                    const std::vector<std::string>& arguments) {
-    std::array<int, 2> pipe_fds{-1, -1};
-    if (pipe2(pipe_fds.data(), O_CLOEXEC) != 0) {
-        log::warn("portal: no pipe for the picker: {}", std::strerror(errno));
-        return false;
-    }
-    std::vector<std::string> words{program.string()};
-    words.insert(words.end(), arguments.begin(), arguments.end());
-    std::vector<char*> argv;
-    argv.reserve(words.size() + 1);
-    for (std::string& word : words) {
-        argv.push_back(word.data());
-    }
-    argv.push_back(nullptr);
-
-    posix_spawn_file_actions_t actions{};
-    posix_spawn_file_actions_init(&actions);
-    posix_spawn_file_actions_addopen(&actions, STDIN_FILENO, "/dev/null", O_RDONLY, 0);
-    posix_spawn_file_actions_adddup2(&actions, pipe_fds[1], STDOUT_FILENO);
-    // The service blocks the signals it reads from a signalfd: the picker starts without that.
-    posix_spawnattr_t attributes{};
-    posix_spawnattr_init(&attributes);
-    sigset_t none{};
-    sigemptyset(&none);
-    sigset_t defaults{};
-    sigemptyset(&defaults);
-    for (const int signal : {SIGTERM, SIGINT, SIGPIPE, SIGUSR1}) {
-        sigaddset(&defaults, signal);
-    }
-    posix_spawnattr_setsigmask(&attributes, &none);
-    posix_spawnattr_setsigdefault(&attributes, &defaults);
-    posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF);
-    const int spawned =
-        posix_spawn(&pid_, argv.front(), &actions, &attributes, argv.data(), environ);
-    posix_spawnattr_destroy(&attributes);
-    posix_spawn_file_actions_destroy(&actions);
-    close(pipe_fds[1]);
-    if (spawned != 0) {
-        pid_ = -1;
-        close(pipe_fds[0]);
-        log::warn("portal: cannot start {}: {}", program.string(), std::strerror(spawned));
-        return false;
-    }
-    output_ = pipe_fds[0];
-    fcntl(output_, F_SETFL, fcntl(output_, F_GETFL) | O_NONBLOCK);
-    pidfd_ = open_pidfd(pid_);
-    if (pidfd_ < 0) {
-        log::warn("portal: no pidfd for the picker: {}", std::strerror(errno));
-        kill(pid_, SIGKILL);
-        int status = 0;
-        while (waitpid(pid_, &status, 0) < 0 && errno == EINTR) {
-        }
-        pid_ = -1;
-        close_fds();
-        return false;
-    }
-    output_source_ = loop_.add_fd(output_, POLLIN, [this](short /*revents*/) { read_output(); });
-    // Readable once the picker has ended: what it printed is in the pipe by then, even when
-    // something it started keeps the pipe open.
-    exit_source_ = loop_.add_fd(pidfd_, POLLIN, [this](short /*revents*/) { finish(); });
-    log::debug("portal: picker {} started", pid_);
-    return true;
+    return program_.start(program, arguments);
 }
 
-void Picker::stop() {
-    if (pid_ <= 0) {
-        return;
-    }
-    signal_pidfd(pidfd_, SIGTERM);
-    if (kill_timer_ == 0) {
-        kill_timer_ = loop_.add_timer(kStopGrace, std::chrono::milliseconds{0}, [this] {
-            kill_timer_ = 0;
-            signal_pidfd(pidfd_, SIGKILL);
-            log::warn("portal: picker {} did not close: killed", pid_);
-        });
-    }
-}
-
-void Picker::read_output() {
-    if (output_ < 0) {
-        return;
-    }
-    std::array<char, 4096> buffer{};
-    for (;;) {
-        const ssize_t got = read(output_, buffer.data(), buffer.size());
-        if (got > 0) {
-            if (received_.size() < kMaxOutput) {
-                received_.append(buffer.data(), static_cast<std::size_t>(got));
-            }
-            continue;
-        }
-        if (got < 0 && errno == EINTR) {
-            continue;
-        }
-        if (got == 0 || errno != EAGAIN) {
-            // The end, or an error: nothing more comes from it.
-            loop_.remove(output_source_);
-            output_source_ = 0;
-            close(output_);
-            output_ = -1;
-        }
-        return;
-    }
-}
-
-void Picker::finish() {
-    read_output();  // what is left in the pipe
-    int status = 0;
-    while (waitpid(pid_, &status, 0) < 0 && errno == EINTR) {
-    }
-    log::debug("portal: picker {} ended ({})", pid_, status);
-    pid_ = -1;
-    close_fds();
-    // done may end this picker: nothing of it is touched after.
-    const Done done = std::move(done_);
-    const PickResult result = pick_result(received_, status);
-    done(result);
-}
-
-void Picker::close_fds() {
-    loop_.remove(output_source_);
-    loop_.remove(exit_source_);
-    loop_.remove(kill_timer_);
-    output_source_ = 0;
-    exit_source_ = 0;
-    kill_timer_ = 0;
-    if (output_ >= 0) {
-        close(output_);
-        output_ = -1;
-    }
-    if (pidfd_ >= 0) {
-        close(pidfd_);
-        pidfd_ = -1;
-    }
-}
+void Picker::stop() { program_.stop(); }
 
 // ---------------------------------------------------------------------------------------------
 // FileChooser

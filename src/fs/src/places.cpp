@@ -12,6 +12,7 @@
 #include <system_error>
 #include <unistd.h>
 #include <utility>
+#include <vector>
 
 #include "nordend/core/file.hpp"
 #include "nordend/core/log.hpp"
@@ -263,6 +264,113 @@ std::optional<std::string> remove_bookmark(std::string_view text,
         return std::nullopt;
     }
     return out;
+}
+
+namespace {
+
+// A bookmarks file as lines (without their newlines), and back.
+struct BookmarkLines {
+    std::vector<std::string> lines;
+    bool final_newline{false};
+
+    explicit BookmarkLines(std::string_view text) : final_newline{text.ends_with('\n')} {
+        for_each_line(text, [&](std::string_view line) { lines.emplace_back(line); });
+    }
+
+    // The first line naming folder.
+    [[nodiscard]] std::optional<std::size_t> find(const std::filesystem::path& folder) const {
+        for (std::size_t i = 0; i < lines.size(); ++i) {
+            const std::optional<std::filesystem::path> path = bookmark_folder(lines[i]);
+            if (path && same_folder(*path, folder)) {
+                return i;
+            }
+        }
+        return std::nullopt;
+    }
+
+    [[nodiscard]] std::string text() const {
+        std::string out;
+        for (std::size_t i = 0; i < lines.size(); ++i) {
+            out += lines[i];
+            if (i + 1 < lines.size() || final_newline) {
+                out += '\n';
+            }
+        }
+        return out;
+    }
+};
+
+// A bookmark line's URI as written ("file:///a%20b"), and its label (" Label", the space
+// included; empty when none).
+std::pair<std::string_view, std::string_view> split_bookmark(std::string_view line) {
+    line = trim(line);
+    const std::size_t space = line.find(' ');
+    if (space == std::string_view::npos) {
+        return {line, {}};
+    }
+    return {line.substr(0, space), line.substr(space)};
+}
+
+}  // namespace
+
+std::optional<std::string> rename_bookmark(std::string_view text,
+                                           const std::filesystem::path& folder,
+                                           std::string_view label) {
+    BookmarkLines file{text};
+    const std::optional<std::size_t> at = file.find(folder);
+    if (!at) {
+        return std::nullopt;
+    }
+    std::string& line = file.lines[*at];
+    std::string uri{split_bookmark(line).first};
+    // One line: a newline or a tab in the label would break the file, or GTK's reading of it.
+    std::string clean;
+    for (const char c : trim(label)) {
+        clean += c == '\n' || c == '\r' || c == '\t' ? ' ' : c;
+    }
+    const std::optional<std::filesystem::path> path = bookmark_folder(line);
+    if (!clean.empty() && clean != label_of(plain_folder(path.value_or(folder)))) {
+        uri += ' ';
+        uri += clean;
+    }
+    line = std::move(uri);
+    return file.text();
+}
+
+std::optional<std::string> repoint_bookmark(std::string_view text,
+                                            const std::filesystem::path& from,
+                                            const std::filesystem::path& to) {
+    BookmarkLines file{text};
+    const std::optional<std::size_t> at = file.find(from);
+    if (!at) {
+        return std::nullopt;
+    }
+    std::string& line = file.lines[*at];
+    line = core::file_uri(plain_folder(to)) + std::string{split_bookmark(line).second};
+    return file.text();
+}
+
+std::optional<std::string> move_bookmark(std::string_view text, const std::filesystem::path& folder,
+                                         int step) {
+    BookmarkLines file{text};
+    // The lines the sidebar shows, in order.
+    std::vector<std::size_t> shown;
+    std::optional<std::size_t> place;
+    for (std::size_t i = 0; i < file.lines.size(); ++i) {
+        if (const std::optional<std::filesystem::path> path = bookmark_folder(file.lines[i])) {
+            if (!place && same_folder(*path, folder)) {
+                place = shown.size();
+            }
+            shown.push_back(i);
+        }
+    }
+    if (!place || (step < 0 && *place == 0) || (step > 0 && *place + 1 >= shown.size()) ||
+        step == 0) {
+        return std::nullopt;
+    }
+    const std::size_t other = step < 0 ? *place - 1 : *place + 1;
+    std::swap(file.lines[shown[*place]], file.lines[shown[other]]);
+    return file.text();
 }
 
 std::vector<Place> parse_mounts(std::string_view text) {

@@ -4,6 +4,47 @@ Work log, newest first. Each entry: what was done, decisions, measurements, open
 
 ---
 
+## 2026-11-14 — Bookmarks renamed, pointed elsewhere and reordered (issue #10)
+
+**Tested by the author** (2026-11-14, `build/nordend`, his own GTK bookmarks backed up first):
+the menu (Move Up dimmed on the first, Move Down on the last), Rename… and F2 (Enter, Escape, an
+empty name giving the folder's back, a click in the view keeping the name), Alt+↑/↓ with the
+cursor following, F2 off a bookmark doing nothing, Choose Folder… (a folder chosen; Escape
+changing nothing); the result seen in another program's chooser.
+
+**Done**
+- `fs::rename_bookmark` (the URI kept byte for byte, the label after it; empty or the folder's
+  own name: none; newlines and tabs made spaces), `fs::repoint_bookmark` (the URI as GLib writes
+  it, the label and place kept), `fs::move_bookmark` (swapped with the shown bookmark before or
+  after; `sftp://` and blank lines stay put). Every other line unchanged.
+- The Browser's bookmark queue (`BookmarkChange`) takes rename, repoint and move: one change at
+  a time on a worker, written atomically. A repoint to a folder with a bookmark already, or to
+  something not a folder, is refused with the add's messages; the sidebar's cursor follows a
+  repointed bookmark (`Sidebar::set_cursor_to`), and a moved one by its path as before.
+- The bookmark's menu: Rename…, Choose Folder… (only with a folder chooser), Move Up, Move Down
+  (dimmed at the ends), Remove from Sidebar.
+- `Sidebar`: a `ui::TextField` on the bookmark's row (`start_rename`, `rename_key`,
+  `rename_pointer`, `paste`), drawn on a quiet row instead of the cursor's colour; `edit_key`:
+  F2 and Alt+↑/↓ while the keyboard is in the sidebar, taken even off a bookmark so they never
+  reach the view (F2 is the view's rename there; Alt+↑ the parent folder, but only in the
+  views). The shortcuts table lists both for the sidebar (F1, the command palette).
+- Choose Folder…: `Browser::set_folder_chooser`, which `main` sets (not in a picker) to run this
+  very program, `nordend --pick --folders --title "Choose Folder" START`, one at a time.
+  `platform::ProgramOutput` is `portal::Picker`'s process code moved out unchanged (spawn with
+  stdout on a pipe, pidfd, SIGTERM then SIGKILL after 3 s, done(output, status)); the portal's
+  `Picker` now wraps it, and its tests pass as before.
+- Tests (482): the three bookmark edits (labels with spaces and non-ASCII, no final newline,
+  remote lines kept, ends refused), the Browser (F2, paste, Enter, Escape, Alt+arrows and the
+  cursor, F2 off a bookmark, repoint and its refusals, an empty label), the menu with and
+  without a folder chooser, Choose Folder… through a fake chooser; the old "F2 in the sidebar
+  does nothing" test now expects the key taken and still no view rename.
+
+**Open**
+- The Choose Folder window is not set over Nordend's (that needs exporting our window through
+  xdg-foreign); dragging a bookmark to reorder it.
+
+---
+
 ## 2026-11-14 — Quick Look of an ORF: where the time went, a faster scaler, portraits fitted
 
 **Tested by the author** (2026-11-14, on screen, Umbriel, `build/nordend` with

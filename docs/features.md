@@ -326,10 +326,16 @@ README's [What's next](../README.md#whats-next).
 - **Favourites:** Ctrl+D adds the folder shown, "Add to Sidebar" the folders selected (or the
   folder, from its empty part), and folders dragged onto the "BOOKMARKS" title or below the last
   place are added at the end, a line showing where; dropping onto a place still moves into it.
-  A right click on a favourite removes it. They are the GTK bookmarks: other file managers and
-  the Open dialogs of other apps (Firefox's) show them too. The file is written all at once on a
-  worker, keeping what Nordend does not touch (remote bookmarks, labels, order); a folder already
-  there is not added twice. Reordering and renaming come later.
+  A favourite's right click: **Rename…** (F2 with the keyboard in the sidebar), a field on its
+  row, Enter or a click elsewhere keeping the name, Escape leaving it, an empty name giving the
+  folder's back; **Choose Folder…**, Nordend's own folder chooser in a window of its own,
+  starting in the favourite's folder, the one chosen taking its place with its name and
+  position (one with a favourite already is refused); **Move Up** and **Move Down** (Alt+↑,
+  Alt+↓ with the keyboard in the sidebar), among the favourites shown; **Remove from Sidebar**.
+  They are the GTK bookmarks: other file managers and the Open dialogs of other apps (Firefox's)
+  show them too, renamed and in the same order. The file is written all at once on a worker,
+  changing only that favourite's line and keeping the rest (remote bookmarks, other labels);
+  a folder already there is not added twice. Dragging to reorder comes later.
 - **Breadcrumb:** the folder's path as a row of clickable steps, starting from your home. A long
   path is shortened from the left.
 - **Status bar:** item count, selection, free space on the disk (updated after a copy into the

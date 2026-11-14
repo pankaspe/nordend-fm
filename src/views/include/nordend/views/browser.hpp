@@ -261,6 +261,14 @@ public:
 
     void set_terminal_handler(TerminalHandler terminal) { terminal_ = std::move(terminal); }
 
+    // Lets the user choose a folder, starting in start (Nordend's own folder chooser, a process
+    // of its own): chosen(folder) when one was chosen, nothing when cancelled. Without one, a
+    // bookmark's "Choose Folder…" is not there.
+    using FolderChooser = std::function<void(const std::filesystem::path& start,
+                                             std::function<void(std::filesystem::path)> chosen)>;
+
+    void set_folder_chooser(FolderChooser chooser) { folder_chooser_ = std::move(chooser); }
+
     // Where "New File" takes its templates from: fs::templates_dir() unless set (tests).
     void set_templates_dir(std::filesystem::path directory) {
         templates_dir_ = std::move(directory);
@@ -396,6 +404,13 @@ public:
 
     // "Remove from Sidebar" on a bookmark.
     void remove_from_sidebar(const std::filesystem::path& folder);
+
+    // A bookmark renamed (an empty label: the folder's own name), pointed to another folder
+    // (keeping its label and place; refused when that folder has one already), moved among the
+    // shown bookmarks (-1 up, +1 down). Through the same queue as add_to_sidebar().
+    void rename_bookmark(const std::filesystem::path& folder, std::string label);
+    void repoint_bookmark(const std::filesystem::path& from, std::filesystem::path to);
+    void move_bookmark(const std::filesystem::path& folder, int step);
 
     // The bookmarks file: fs::bookmarks_file() unless set (tests).
     void set_bookmarks_file(std::filesystem::path file) { bookmarks_file_ = std::move(file); }
@@ -595,6 +610,9 @@ private:
     struct BookmarkChange {
         std::vector<std::filesystem::path> add;
         std::optional<std::filesystem::path> remove;
+        std::optional<std::pair<std::filesystem::path, std::string>> rename;  // folder, label
+        std::optional<std::pair<std::filesystem::path, std::filesystem::path>> repoint;  // from, to
+        std::optional<std::pair<std::filesystem::path, int>> move;  // folder, step
     };
 
     void next_bookmark_change();
@@ -757,6 +775,7 @@ private:
     ChoicesHandler choices_;
     OpenWithHandler open_with_;
     TerminalHandler terminal_;
+    FolderChooser folder_chooser_;
     std::optional<std::filesystem::path> templates_dir_;
     fs::PlaceSources place_sources_{
         fs::PlaceSources::from_environment()};  // read at start: where the templates folder is

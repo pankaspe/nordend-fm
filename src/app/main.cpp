@@ -42,6 +42,7 @@
 #include "nordend/platform/opener.hpp"
 #include "nordend/platform/portal.hpp"
 #include "nordend/platform/portal_config.hpp"
+#include "nordend/platform/program_output.hpp"
 #include "nordend/platform/udisks.hpp"
 #include "nordend/theme/app_icon.hpp"
 #include "nordend/theme/theme.hpp"
@@ -56,6 +57,7 @@
 #include "nordend/ui/text.hpp"
 #include "nordend/ui/window.hpp"
 #include "nordend/views/browser.hpp"
+#include "nordend/views/file_clipboard.hpp"
 #include "nordend/views/state.hpp"
 #include "nordend/views/title_bar.hpp"
 #include "test_scene.hpp"
@@ -648,6 +650,8 @@ int main(int argc, char** argv) {
         // The column view and the grid (ROADMAP 4.2, 4.4), unless the renderer test scene was
         // asked for.
         std::unique_ptr<views::Browser> columns;
+        // A bookmark's "Choose Folder…": Nordend's own folder chooser, one at a time.
+        std::unique_ptr<platform::ProgramOutput> folder_chooser;
         // Files open with their default applications (ROADMAP 6.1); before the config's watcher,
         // which changes its terminal.
         std::unique_ptr<platform::Opener> opener;
@@ -754,6 +758,38 @@ int main(int argc, char** argv) {
                 });
             columns->set_terminal_handler(
                 [&](const std::filesystem::path& directory) { opener->open_terminal(directory); });
+            if (!pick) {
+                // This very program as the chooser: `nordend --pick --folders START`, a window of
+                // its own, printing the folder chosen as a file:// URI.
+                columns->set_folder_chooser([&](const std::filesystem::path& start,
+                                                std::function<void(std::filesystem::path)> chosen) {
+                    if (folder_chooser && folder_chooser->running()) {
+                        return;  // one is open already
+                    }
+                    std::error_code error;
+                    const std::filesystem::path self =
+                        std::filesystem::read_symlink("/proc/self/exe", error);
+                    folder_chooser = std::make_unique<platform::ProgramOutput>(
+                        loop, [&, chosen = std::move(chosen)](const std::string& output,
+                                                              int /*wait_status*/) {
+                            std::string_view lines{output};
+                            while (!lines.empty()) {
+                                const std::size_t end = std::min(lines.find('\n'), lines.size());
+                                if (const std::optional<std::filesystem::path> folder =
+                                        views::path_from_uri(lines.substr(0, end))) {
+                                    chosen(*folder);
+                                    break;
+                                }
+                                lines.remove_prefix(std::min(end + 1, lines.size()));
+                            }
+                        });
+                    if (error || !folder_chooser->start(self, {"--pick", "--folders", "--title",
+                                                               "Choose Folder", start.string()})) {
+                        folder_chooser.reset();
+                        columns->show_message("The folder chooser could not start", true);
+                    }
+                });
+            }
             columns->set_quit_handler([&] {
                 log::info("quit from the command palette");
                 loop.quit(0);

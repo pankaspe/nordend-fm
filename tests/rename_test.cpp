@@ -414,7 +414,9 @@ TEST_CASE("browser: Ctrl+Shift+N makes a folder and edits its name") {
     }
 }
 
-TEST_CASE("browser: F2 with nothing under the cursor, and in the sidebar, does nothing") {
+TEST_CASE(
+    "browser: F2 with nothing under the cursor, and in the sidebar off a bookmark, does "
+    "nothing") {
     BrowserFixture f;
     f.browser.open(f.root);
     f.browser.set_mode(Browser::Mode::grid);
@@ -424,6 +426,8 @@ TEST_CASE("browser: F2 with nothing under the cursor, and in the sidebar, does n
     f.folder()->select_name("notes.txt");
     REQUIRE(f.settle());
     f.browser.sidebar().set_focused(true);
-    CHECK_FALSE(f.press(key(XKB_KEY_F2)));
+    // The sidebar's own key now (it renames bookmarks): taken, and never the view's rename.
+    CHECK(f.press(key(XKB_KEY_F2)));
     CHECK_FALSE(f.browser.name_editor().active());
+    CHECK_FALSE(f.browser.sidebar().renaming());
 }

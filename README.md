@@ -12,7 +12,7 @@
   <a href="https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.0"><img src="https://img.shields.io/badge/release-v0.7.0-2a6a9e" alt="release v0.7.0"></a>
   <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white" alt="C++20">
   <img src="https://img.shields.io/badge/Wayland-native-FFBC00?logo=wayland&logoColor=black" alt="Wayland native">
-  <img src="https://img.shields.io/badge/tests-478%20%C2%B7%20ASan%20%C2%B7%20TSan-4B32C3" alt="478 tests, ASan, TSan">
+  <img src="https://img.shields.io/badge/tests-482%20%C2%B7%20ASan%20%C2%B7%20TSan-4B32C3" alt="482 tests, ASan, TSan">
   <a href="https://github.com/pankaspe/nordend-fm/actions/workflows/ci.yml"><img src="https://github.com/pankaspe/nordend-fm/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <img src="https://img.shields.io/badge/license-MIT-3DA639" alt="MIT license">
 </p>
@@ -119,7 +119,8 @@ every shortcut.
   from templates, undo and redo, freedesktop trash with restore, delete permanently
 - **Drag and drop** within Nordend and with other apps; rubber-band selection; the system
   clipboard
-- **Sidebar:** places, GTK bookmarks, disks through udisks2 (mount, unmount, eject)
+- **Sidebar:** places, GTK bookmarks (renamed, pointed elsewhere and reordered in place), disks
+  through udisks2 (mount, unmount, eject)
 - **File chooser** of other applications (the desktop portal's): open and save with Nordend's
   views, thumbnails and Quick Look, the application's filters and choices
 - **Opening:** default applications and "Open With", resolved exactly as GLib does; a terminal
@@ -138,7 +139,7 @@ every shortcut.
 |---|---|
 | Binary | **4.26 MB** (3.55 MB stripped), x86-64; the decoders and text readers in `nordend-preview`, 1.15 MB (1.03 stripped), a separate caged helper; the file chooser's service `nordend-portal`, 0.35 MB (0.28 stripped), started only when an application asks |
 | Libraries | 17 direct (the helper and the service: 8 each); no GTK, no Qt, no GLib |
-| Code | about 55 600 lines of C++20, 19 900 of tests (478 test cases, under ASan and TSan too) |
+| Code | about 55 600 lines of C++20, 19 900 of tests (482 test cases, under ASan and TSan too) |
 | Memory | **24 MB** of its own at start; pictures are decoded in the helpers, which give their memory back after a quiet second |
 | Idle | **0 CPU**: nothing is drawn while nothing moves |
 
