@@ -4,6 +4,19 @@ Work log, newest first. Each entry: what was done, decisions, measurements, open
 
 ---
 
+## 2026-11-14 — Nordend 0.7.0
+
+A minor release with ROADMAP step 4: Nordend as the file chooser of other applications
+(`nordend-portal` + `nordend --pick`: opening, folders, filters, saving, choices, the parent
+window through xdg-foreign; `nordend --set-file-chooser`). CMake version, README (badges, note,
+Features, At a glance, install note, Versions, What's next) and features say so. At a glance:
+nordend 4.26 MB / 3.55 stripped, the helper 1.15 / 1.03, `nordend-portal` 0.35 / 0.28,
+`readelf -d` NEEDED 17, 8 and 8, 55 600 + 19 900 lines, 476 tests (doctest: 475 passed + 1
+skipped); memory not re-measured (nothing new at start). Engine protocol still 4; no file
+format parser added in step 4, so no fuzz run.
+
+---
+
 ## 2026-11-14 — The chooser on GNOME and Plasma, and `--set-file-chooser` (ROADMAP 4, 4d)
 
 **Tested by the author** (2026-11-14, VM `nordend-void`, Nordend installed under `/usr`, the

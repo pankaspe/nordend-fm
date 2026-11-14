@@ -487,16 +487,17 @@ FileChooser and portals.conf.
 
 ## Next
 
-0.6.2 is out (Ctrl+Shift+C copies the folder's path; the terminal chosen in `config.toml`; both
-from Evergaster's issue #9), after 0.6.1 (rounded corners and a shadow around Nordend's header,
+0.7.0 is out (Nordend as the file chooser of other applications through xdg-desktop-portal:
+opening, folders, filters, saving, `nordend --set-file-chooser`; tried on Umbriel, GNOME and
+Plasma), after 0.6.2 (Ctrl+Shift+C copies the folder's path; the terminal chosen in
+`config.toml`; both from Evergaster's issue #9), 0.6.1 (rounded corners and a shadow around Nordend's header,
 square on request; a see-through background by barrulus; a clean exit at logout), 0.6.0 (the colours of your GTK
 theme, read live with nothing to set up; one header for the whole window), 0.5.1 (grid thumbnails up to 512 px, hardened builds, a Nix flake,
 sorting by type for names with several types), 0.5.0 (text previews with syntax colours, selecting and
 copying, logs from their end; the helper became the first engine), 0.4.0 (image previews read by Nordend's own code in caged
 helpers: DNG, TIFF, raw previews and EXIF without exiv2), 0.3.1 (more raw previews), 0.3.0 (the
 command palette, finding files, the icon in the accent), 0.2.0 (Sort By, tabs, zoom in the
-lists) and the first release, 0.1.0. Done on `main`, for 0.7.0: Nordend as the file
-chooser of other applications through xdg-desktop-portal (opening, folders, filters, saving,
-`nordend --set-file-chooser`), tried on Umbriel, GNOME and Plasma. Then, roughly in this order: other common formats, colour labels and ratings, a Quick Look for photographers, a
+lists) and the first release, 0.1.0. Then, roughly in this order: network shares in the
+sidebar, other common formats, colour labels and ratings, a Quick Look for photographers, a
 dual pane. See the README's
 [What's next](../README.md#whats-next).

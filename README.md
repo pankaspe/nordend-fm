@@ -9,10 +9,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/pankaspe/nordend-fm/releases/tag/v0.6.2"><img src="https://img.shields.io/badge/release-v0.6.2-2a6a9e" alt="release v0.6.2"></a>
+  <a href="https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.0"><img src="https://img.shields.io/badge/release-v0.7.0-2a6a9e" alt="release v0.7.0"></a>
   <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white" alt="C++20">
   <img src="https://img.shields.io/badge/Wayland-native-FFBC00?logo=wayland&logoColor=black" alt="Wayland native">
-  <img src="https://img.shields.io/badge/tests-453%20%C2%B7%20ASan%20%C2%B7%20TSan-4B32C3" alt="453 tests, ASan, TSan">
+  <img src="https://img.shields.io/badge/tests-476%20%C2%B7%20ASan%20%C2%B7%20TSan-4B32C3" alt="476 tests, ASan, TSan">
   <a href="https://github.com/pankaspe/nordend-fm/actions/workflows/ci.yml"><img src="https://github.com/pankaspe/nordend-fm/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <img src="https://img.shields.io/badge/license-MIT-3DA639" alt="MIT license">
 </p>
@@ -24,10 +24,12 @@
 </p>
 
 > [!NOTE]
-> **Nordend 0.6.2**, the latest release: <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> **copies
-> the path of the folder you're in** (also "Copy Path" in the menu and the command palette), and
-> **`[terminal]` in `config.toml` picks the terminal** that <kbd>F4</kbd> and terminal apps open,
-> before `$TERMINAL`; both asked for by Evergaster. Young software, used every day by its
+> **Nordend 0.7.0**, the latest release: **Nordend can be the Open and Save dialog of other
+> applications**, through the desktop portal: the same views, thumbnails and Quick Look, the
+> application's filters and choices, saving with a question before replacing a file.
+> `nordend --set-file-chooser` chooses it for your desktop
+> ([how](#as-the-file-chooser-of-other-applications)). Tried with Firefox, GTK and Qt
+> applications on Umbriel, GNOME and Plasma. Young software, used every day by its
 > author. On Void Linux, [install it as a package](#on-void-linux); on NixOS or
 > with Nix, from [its flake](#on-nixos-and-with-nix); anywhere else,
 > [build it from source](#from-source) in about a minute.
@@ -89,6 +91,8 @@ every shortcut.
 - **Drag and drop** within Nordend and with other apps; rubber-band selection; the system
   clipboard
 - **Sidebar:** places, GTK bookmarks, disks through udisks2 (mount, unmount, eject)
+- **File chooser** of other applications (the desktop portal's): open and save with Nordend's
+  views, thumbnails and Quick Look, the application's filters and choices
 - **Opening:** default applications and "Open With", resolved exactly as GLib does; a terminal
   in any folder (<kbd>F4</kbd>), the one you choose in `config.toml`
 - **Always current:** folders follow changes on disk (inotify); history with
@@ -103,9 +107,9 @@ every shortcut.
 
 | | |
 |---|---|
-| Binary | **4.11 MB** (3.42 MB stripped), x86-64; the decoders and text readers in `nordend-preview`, 1.15 MB (1.03 stripped), a separate caged helper |
-| Libraries | 17 direct (the helper: 8); no GTK, no Qt, no GLib |
-| Code | about 52 900 lines of C++20, 18 900 of tests (453 test cases, under ASan and TSan too) |
+| Binary | **4.26 MB** (3.55 MB stripped), x86-64; the decoders and text readers in `nordend-preview`, 1.15 MB (1.03 stripped), a separate caged helper; the file chooser's service `nordend-portal`, 0.35 MB (0.28 stripped), started only when an application asks |
+| Libraries | 17 direct (the helper and the service: 8 each); no GTK, no Qt, no GLib |
+| Code | about 55 600 lines of C++20, 19 900 of tests (476 test cases, under ASan and TSan too) |
 | Memory | **24 MB** of its own at start; pictures are decoded in the helpers, which give their memory back after a quiet second |
 | Idle | **0 CPU**: nothing is drawn while nothing moves |
 
@@ -147,7 +151,7 @@ cp -r /tmp/nordend-fm/packaging/void/nordend srcpkgs/
 sudo xbps-install -R hostdir/binpkgs nordend
 ```
 
-The package is the latest release, **0.6.2**. What `main` gains after it comes with the next
+The package is the latest release, **0.7.0**. What `main` gains after it comes with the next
 release; to have it at once, build from source.
 
 ### On NixOS and with Nix
@@ -248,6 +252,7 @@ settled.
 
 | Version | What it brought |
 |---|---|
+| [0.7.0](https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.0), 2026-11-14 | Nordend as the file chooser of other applications, through the desktop portal: open files or folders with its views, thumbnails and Quick Look, the application's filters and choices, saving with New Folder and a question before replacing, over the application's window on GNOME and Plasma; `nordend --set-file-chooser` and `--unset-file-chooser`; a small `nordend-portal` service that D-Bus starts when an application asks, one chooser window per request |
 | [0.6.2](https://github.com/pankaspe/nordend-fm/releases/tag/v0.6.2), 2026-11-13 | Copy the shown folder's path (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>, "Copy Path" on empty space and in the command palette); the terminal chosen in `config.toml` (`[terminal] program` and `args`, live), before `$TERMINAL`, for Open in Terminal and terminal apps; both from Evergaster's issue |
 | [0.6.1](https://github.com/pankaspe/nordend-fm/releases/tag/v0.6.1), 2026-11-13 | Rounded corners and a soft shadow around Nordend's own header, as GTK draws them (square with `[window] corner_radius = 0`); the shadow's edge resizes the window; a see-through background with solid text, icons and pictures (`[window] background_opacity`, by barrulus); a clean exit at logout, with the session's tabs and views saved, when the session bus goes first (GNOME) |
 | [0.6.0](https://github.com/pankaspe/nordend-fm/releases/tag/v0.6.0), 2026-11-13 | Colours from your theme with nothing to set up, read as GTK apps read them (Noctalia, Stylix, matugen, your own `gtk.css`), live; one header, as in a modern file manager: the sidebar to the top, back and forward, the path and the window's buttons in one row (`[window] title_bar = "compositor"` for the compositor's bar), tried on Umbriel, GNOME and Plasma |
@@ -272,9 +277,9 @@ code in caged helpers; 0.5.0 text previews with syntax colours, selecting and co
 grid thumbnails up to 512 px, hardened builds and a Nix flake; 0.6.0 the colours of your theme
 with nothing to set up and one header for the whole window; 0.6.1 rounded corners and a shadow
 around it, square corners or a see-through background on request; 0.6.2 copying the folder's
-path and choosing the terminal. Coming, roughly in this order:
-**a file chooser for other applications** (the desktop portal's, with the grid and thumbnails);
-then **previews, one family at a time**: other common formats one by one (SVG, AVIF, fonts,
+path and choosing the terminal; 0.7.0 Nordend as the file chooser of other applications.
+Coming, roughly in this order: **network shares** in the sidebar (Samba, SFTP, FTP, WebDAV,
+through gvfs when it runs); then **previews, one family at a time**: other common formats one by one (SVG, AVIF, fonts,
 archive contents, audio tags).
 After that: colour labels and star ratings of your own, not tied to any raw editor; a Quick Look
 for photographers (100 % zoom, EXIF, histogram, comparison); a dual pane, a queue of operations
