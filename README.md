@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.1"><img src="https://img.shields.io/badge/release-v0.7.1-2a6a9e" alt="release v0.7.1"></a>
+  <a href="https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.2"><img src="https://img.shields.io/badge/release-v0.7.2-2a6a9e" alt="release v0.7.2"></a>
   <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?logo=cplusplus&logoColor=white" alt="C++20">
   <img src="https://img.shields.io/badge/Wayland-native-FFBC00?logo=wayland&logoColor=black" alt="Wayland native">
   <img src="https://img.shields.io/badge/tests-482%20%C2%B7%20ASan%20%C2%B7%20TSan-4B32C3" alt="482 tests, ASan, TSan">
@@ -24,14 +24,13 @@
 </p>
 
 > [!NOTE]
-> **Nordend 0.7.1**, the latest release: **sharp photos sooner** in Quick Look and the grid
-> (the image scaler twice as fast, the same pixels; portrait photos no longer made larger than
-> the screen), and **the sidebar's bookmarks renamed, pointed to another folder and reordered**
-> in place (right click, or F2 and Alt+↑/↓), asked for by Evergaster. Since 0.7.0 Nordend can
-> also be the Open and Save dialog of other applications
-> ([how](#as-the-file-chooser-of-other-applications)). Young software, used every day by its
-> author. [Install it](#install) as a package on Void Linux, from its flake on NixOS or with
-> Nix, or build it from source anywhere else in about a minute.
+> **Nordend 0.7.2**, the latest release: **nordend-setup**, one shell script that installs
+> Nordend on any distribution and keeps it current. It checks your system, shows the exact
+> command for what is missing, builds the latest release and installs it; later `check`,
+> `update`, `configure` (the file chooser and folders) and `uninstall`, which removes every file
+> it installed. Tried on Debian 13, Ubuntu 26.04, Fedora 43, Arch and openSUSE Tumbleweed, in CI
+> every week. Young software, used every day by its author. [Install it](#install) with
+> nordend-setup, as a package on Void Linux, or from its flake on NixOS or with Nix.
 
 ## Contents
 
@@ -175,8 +174,35 @@ Every measurement and its method is in [docs/benchmarks.md](docs/benchmarks.md).
 ## Install
 
 Nordend needs Linux with a Wayland compositor that offers xdg-shell (developed on Umbriel, also
-tried on GNOME, Plasma and niri) and a GPU driver with OpenGL ES 3.0 (Mesa). Three ways, each
+tried on GNOME, Plasma and niri) and a GPU driver with OpenGL ES 3.0 (Mesa). Four ways, each
 opens with a click:
+
+<details>
+<summary><b>On any distribution</b>: nordend-setup builds, installs and updates it</summary>
+
+`nordend-setup` is one plain shell script that takes you from nothing to Nordend installed and
+set up: it checks your system, shows the exact command that installs what is missing (and asks
+before anything that needs sudo), builds the latest release from its source, installs it into
+`/usr/local` (or `~/.local`) and can make it your file chooser and folder opener. It knows apt,
+dnf, pacman, zypper and xbps; tried in CI on Debian 13, Ubuntu 26.04, Fedora 43, Arch and
+openSUSE Tumbleweed. Ubuntu 24.04 and Linux Mint 22 cannot build Nordend (their sdbus-c++ is
+1.x): the script says so.
+
+Download it, read it, run it:
+
+```sh
+curl -fLO https://raw.githubusercontent.com/pankaspe/nordend-fm/v0.7.2/scripts/nordend-setup
+less nordend-setup
+sh nordend-setup           # asks what to do; or: sh nordend-setup install
+```
+
+It installs itself beside `nordend`. Later, `nordend-setup check` tells whether a newer release
+is out, `update` builds and installs it with the same choices, `configure` changes the file
+chooser and folder settings, `status` shows what is installed, and `uninstall` removes every
+file it installed and gives your settings back. `--dry-run` shows every command without
+running anything. Nordend itself never goes online: only the script does, when you run it.
+
+</details>
 
 <details>
 <summary><b>On Void Linux</b>: a package built from its xbps-src template</summary>
@@ -198,7 +224,7 @@ cp -r /tmp/nordend-fm/packaging/void/nordend srcpkgs/
 sudo xbps-install -R hostdir/binpkgs nordend
 ```
 
-The package is the latest release, **0.7.1**. What `main` gains after it comes with the next
+The package is the latest release, **0.7.2**. What `main` gains after it comes with the next
 release; to have it at once, build from source.
 
 </details>
@@ -232,8 +258,8 @@ environment.systemPackages = [ pkgs.nordend ];
 <details>
 <summary><b>From source</b>: on any distribution, with CMake</summary>
 
-On Void Linux the packages are these; elsewhere, the development packages of the same libraries
-(their names differ and have not been tried yet):
+On Void Linux the packages are these; on other distributions, `sh nordend-setup status` (above)
+prints the command for yours:
 
 ```sh
 sudo xbps-install -S cmake ninja pkgconf wayland-devel wayland-protocols \
@@ -255,7 +281,8 @@ instead: `sudo cmake --install build --prefix /usr --strip`.
 
 ### Then
 
-Make it the default for folders (a browser's "Show in folder", `xdg-open`) and give it a key:
+With nordend-setup, `nordend-setup configure` does what follows. By hand: make it the default
+for folders (a browser's "Show in folder", `xdg-open`) and give it a key:
 
 ```sh
 xdg-mime default nordend.desktop inode/directory
@@ -269,8 +296,9 @@ xdg-mime default nordend.desktop inode/directory
 ### As the file chooser of other applications
 
 Nordend can be the Open and Save dialog of other applications, through the desktop portal. It
-needs Nordend installed under `/usr` (the Void package is), because xdg-desktop-portal looks for
-its backends only there. Then choose it for your desktop, once:
+needs Nordend's `nordend.portal` under `/usr/share` (the Void package installs it; nordend-setup
+copies it there), because xdg-desktop-portal looks for its backends only there. Then choose it
+for your desktop, once:
 
 ```sh
 nordend --set-file-chooser     # then log out and in again
@@ -307,6 +335,7 @@ settled.
 
 | Version | What it brought |
 |---|---|
+| [0.7.2](https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.2), 2026-11-14 | nordend-setup: install Nordend from its source on any distribution (apt, dnf, pacman, zypper, xbps), with the build dependencies shown and installed, into `/usr/local` or `~/.local`; `check` and `update` to keep it current with the same choices, `configure` for the file chooser and folders, `status`, and `uninstall` removing every file it installed and giving the settings back; tried in CI on Debian 13, Ubuntu 26.04, Fedora 43, Arch and openSUSE Tumbleweed |
 | [0.7.1](https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.1), 2026-11-14 | Quick Look of a raw photo from 144 to 110 ms on screen (median about 102), and grid thumbnails made faster: the image scaler rewritten (twice as fast, the very same pixels), portrait photos made to fit the screen instead of 78 % larger; the sidebar's bookmarks renamed, pointed to another folder (Nordend's own folder chooser) and moved up or down, from their menu or with F2 and Alt+↑/↓, from Evergaster's issue |
 | [0.7.0](https://github.com/pankaspe/nordend-fm/releases/tag/v0.7.0), 2026-11-14 | Nordend as the file chooser of other applications, through the desktop portal: open files or folders with its views, thumbnails and Quick Look, the application's filters and choices, saving with New Folder and a question before replacing, over the application's window on GNOME and Plasma; `nordend --set-file-chooser` and `--unset-file-chooser`; a small `nordend-portal` service that D-Bus starts when an application asks, one chooser window per request |
 | [0.6.2](https://github.com/pankaspe/nordend-fm/releases/tag/v0.6.2), 2026-11-13 | Copy the shown folder's path (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd>, "Copy Path" on empty space and in the command palette); the terminal chosen in `config.toml` (`[terminal] program` and `args`, live), before `$TERMINAL`, for Open in Terminal and terminal apps; both from Evergaster's issue |
@@ -334,7 +363,8 @@ grid thumbnails up to 512 px, hardened builds and a Nix flake; 0.6.0 the colours
 with nothing to set up and one header for the whole window; 0.6.1 rounded corners and a shadow
 around it, square corners or a see-through background on request; 0.6.2 copying the folder's
 path and choosing the terminal; 0.7.0 Nordend as the file chooser of other applications;
-0.7.1 sharper photos sooner and bookmarks renamed and reordered.
+0.7.1 sharper photos sooner and bookmarks renamed and reordered; 0.7.2 nordend-setup, to
+install and update it on any distribution.
 Coming, roughly in this order: **network shares** in the sidebar (Samba, SFTP, FTP, WebDAV,
 through gvfs when it runs); then **previews, one family at a time**: other common formats one by one (SVG, AVIF, fonts,
 archive contents, audio tags).

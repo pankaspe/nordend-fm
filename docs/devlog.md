@@ -4,6 +4,24 @@ Work log, newest first. Each entry: what was done, decisions, measurements, open
 
 ---
 
+## 2026-11-14 — Nordend 0.7.2
+
+**Done**
+- Release 0.7.2: nordend-setup (below). The README's install opens with it ("download, read,
+  run", the script fetched from the tag); "From source", "Then" and the file chooser point to
+  it.
+- CI `setup.yml` green on all five distributions (4-6 minutes a job, two builds each): install
+  from a container with only git, check, update, uninstall with all 11 files gone. The first
+  run failed in the workflow's own check (it looked in `/root`; GitHub's containers have
+  `HOME=/github/home`), fixed in `e902bb0`.
+- The `distro-check` branch and its `distros.yml` removed: `setup.yml` does their work.
+
+**Decisions**
+- The Arch VM and a PKGBUILD wait (packages for other distributions later); the author moves
+  his own Void to nordend-setup in `~/.local` from 0.7.2, so it is tried every day.
+
+---
+
 ## 2026-11-14 — nordend-setup (ROADMAP 4¼)
 
 **Done**

@@ -519,7 +519,8 @@ FileChooser and portals.conf.
 
 ## Next
 
-0.7.1 is out (Quick Look and grid thumbnails faster: the image scaler rewritten, portrait
+0.7.2 is out (nordend-setup: Nordend installed, updated, set up and removed by one script on
+any distribution, tried in CI on Debian, Ubuntu, Fedora, Arch and openSUSE), after 0.7.1 (Quick Look and grid thumbnails faster: the image scaler rewritten, portrait
 photos fitted to the screen; the sidebar's bookmarks renamed, pointed elsewhere and reordered,
 from Evergaster's issue #10), after 0.7.0 (Nordend as the file chooser of other applications
 through xdg-desktop-portal: opening, folders, filters, saving, `nordend --set-file-chooser`;
