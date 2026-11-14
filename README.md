@@ -39,8 +39,9 @@
 - [Features](#features)
 - [At a glance](#at-a-glance)
 - [Benchmarks](#benchmarks)
-- [Install](#install): Void Linux, NixOS and Nix, from source;
-  [then](#then), [as the file chooser of other applications](#as-the-file-chooser-of-other-applications),
+- [Install](#install): any distribution, Void Linux, NixOS and Nix, from source;
+  [nordend-setup's commands](#nordend-setup), [then](#then),
+  [as the file chooser of other applications](#as-the-file-chooser-of-other-applications),
   [colours](#colours)
 - [Versions](#versions)
 - [What's next](#whats-next)
@@ -196,11 +197,9 @@ less nordend-setup
 sh nordend-setup           # asks what to do; or: sh nordend-setup install
 ```
 
-It installs itself beside `nordend`. Later, `nordend-setup check` tells whether a newer release
-is out, `update` builds and installs it with the same choices, `configure` changes the file
-chooser and folder settings, `status` shows what is installed, and `uninstall` removes every
-file it installed and gives your settings back. `--dry-run` shows every command without
-running anything. Nordend itself never goes online: only the script does, when you run it.
+It installs itself beside `nordend`, to keep Nordend current later: its commands are below, in
+[nordend-setup](#nordend-setup). Nordend itself never goes online: only the script does, when
+you run it.
 
 </details>
 
@@ -278,6 +277,37 @@ To have Nordend as the file chooser of other applications (below), install it un
 instead: `sudo cmake --install build --prefix /usr --strip`.
 
 </details>
+
+### nordend-setup
+
+Once Nordend is installed with it, `nordend-setup` sits beside `nordend`. Run it without a
+command and it shows where things stand and asks what to do, or name the command:
+
+| Command | What it does |
+|---|---|
+| `status` | Your system (distribution, compiler, libraries) and Nordend: every copy on your PATH with its version and who installed it, whether it is the file chooser and opens folders. Changes nothing. |
+| `check` | Asks GitHub for the newest release and compares it with the one installed. Installs nothing. |
+| `update` | Builds the newest release and installs it in place of the old one, with the same choices as the first install (where, and the file chooser's file); removes the files the new version no longer has. Your settings stay as they are. |
+| `install` | The first install: checks the system, installs the missing build packages (the exact command shown, one question for sudo), downloads the release, builds it, installs it into `/usr/local` or `~/.local`, then offers `configure`. |
+| `configure` | Makes Nordend the file chooser of other applications and the application that opens folders, or gives them back to what you had before; says where to set a key for it. |
+| `uninstall` | Gives the file chooser and folders back, then removes every file it installed, and only those. |
+
+A new release, for example:
+
+```sh
+nordend-setup check     # ✓ Nordend 0.7.3 is out: nordend-setup update
+nordend-setup update    # builds and installs it; your settings stay
+```
+
+Options: `--dry-run` shows every command and runs none; `--yes` takes the recommended answer to
+every question (for scripts); `--prefix DIR` installs into DIR, or picks the install there;
+`--no-color` (or `NO_COLOR`) for plain output; `--help` lists them all.
+
+What it keeps: `share/nordend/install-record` (the version, the commit it was built from, where,
+when) and `share/nordend/installed-files` (every file) beside the install; the application that
+opened folders before, in `~/.local/state/nordend-setup/settings`; nothing else. It builds in
+`~/.cache/nordend-setup` and empties it afterwards. A Nordend installed by a package manager or
+Nix is left to it: nordend-setup stops rather than install a second copy.
 
 ### Then
 
