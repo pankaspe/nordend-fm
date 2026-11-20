@@ -9,6 +9,7 @@ add_library(nordend_fs
     src/file_filter.cpp
     src/measure.cpp
     src/icon.cpp
+    src/links.cpp
     src/mime.cpp
     src/operations.cpp
     src/permissions.cpp

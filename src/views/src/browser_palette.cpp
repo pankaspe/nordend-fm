@@ -125,6 +125,9 @@ std::vector<PaletteItem> Browser::palette_items() {
         command(Command::copy, "copy", "Copy");
         command(Command::cut, "cut", "Cut");
     }
+    if (!names.empty() && editable) {
+        add("command:create_link", "Create Link", "", [this] { create_links(); });
+    }
     bool can_paste = !clipboard_.names.empty();
     if (!can_paste && system_.types) {
         const std::vector<std::string> types = system_.types();

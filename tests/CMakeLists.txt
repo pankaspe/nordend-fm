@@ -32,6 +32,7 @@ add_executable(nordend-tests
     sandbox_test.cpp
     tiff_test.cpp
     image_test.cpp
+    links_test.cpp
     load_test.cpp
     memory_test.cpp
     mime_test.cpp

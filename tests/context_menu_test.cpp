@@ -249,10 +249,10 @@ TEST_CASE("context menu: the items for one entry, several, empty space; paste on
     CHECK(f.press(key(XKB_KEY_Menu)));
     REQUIRE(f.menu().is_open());
     CHECK(ids(f.menu().items()) == Names{"open", "open_with", "compress_zip", "compress_tar",
-                                         "copy", "cut", "-paste", "rename", "trash", "erase",
-                                         "sort"});
+                                         "copy", "cut", "-paste", "create_link", "rename", "trash",
+                                         "erase", "sort"});
     CHECK(f.menu().items()[4].keys == "Ctrl+C");  // from the shortcuts table
-    CHECK(f.menu().items()[8].keys == "Delete");
+    CHECK(f.menu().items()[9].keys == "Delete");
     CHECK(f.press(key(XKB_KEY_Escape)));
     CHECK_FALSE(f.menu().is_open());
 
@@ -260,14 +260,15 @@ TEST_CASE("context menu: the items for one entry, several, empty space; paste on
     f.select({"a.txt", "b.txt"});
     f.browser.open_menu(100, 100, false);
     CHECK(ids(f.menu().items()) == Names{"open", "open_with", "compress_zip", "compress_tar",
-                                         "copy", "cut", "-paste", "-rename", "trash", "erase",
-                                         "sort"});
+                                         "copy", "cut", "-paste", "create_link", "-rename", "trash",
+                                         "erase", "sort"});
     f.menu().close();
     f.select({"sub"});
     CHECK(f.press(key(XKB_KEY_F10, {.shift = true})));
     CHECK(ids(f.menu().items()) == Names{"open", "open_with", "open_tab", "open_terminal",
                                          "add_bookmark", "compress_zip", "compress_tar", "copy",
-                                         "cut", "-paste", "rename", "trash", "erase", "sort"});
+                                         "cut", "-paste", "create_link", "rename", "trash", "erase",
+                                         "sort"});
 
     // Copy from the menu; then Paste can be chosen, here and on empty space.
     f.choose("copy");
@@ -319,7 +320,7 @@ TEST_CASE("context menu: config.toml's actions where they fit, grouped, run on t
     f.browser.open_menu(100, 100, false);
     CHECK(ids(f.menu().items()) == Names{"open", "open_with", "action:0", "actions:Archive",
                                          "compress_zip", "compress_tar", "copy", "cut", "-paste",
-                                         "-rename", "trash", "erase", "sort"});
+                                         "create_link", "-rename", "trash", "erase", "sort"});
     CHECK(f.menu().items()[2].separator);
     CHECK(f.menu().items()[2].label == "Edit Text");
     const MenuItem& group = f.menu().items()[3];
@@ -356,8 +357,8 @@ TEST_CASE("context menu: config.toml's actions where they fit, grouped, run on t
     f.select({"a.txt"});
     f.browser.open_menu(100, 100, false);
     CHECK(ids(f.menu().items()) == Names{"open", "open_with", "compress_zip", "compress_tar",
-                                         "copy", "cut", "-paste", "rename", "trash", "erase",
-                                         "sort"});
+                                         "copy", "cut", "-paste", "create_link", "rename", "trash",
+                                         "erase", "sort"});
 }
 
 TEST_CASE("context menu: Sort By sorts every view, and the folders they open later") {
@@ -516,6 +517,21 @@ TEST_CASE("context menu: Move to Trash and Rename from the menu do what their ke
     CHECK(f.press(key(XKB_KEY_Menu)));
     f.choose("rename");
     CHECK(f.browser.name_editor().active());
+}
+
+TEST_CASE("context menu: Create Link makes a link next to each item, and selects them") {
+    Fixture f;
+    f.select({"a.txt", "sub"});
+    CHECK(f.press(key(XKB_KEY_Menu)));
+    f.choose("create_link");
+    REQUIRE(f.settle());
+    CHECK(fs::read_symlink(f.photos / "Link to a.txt") == f.photos / "a.txt");
+    CHECK(fs::read_symlink(f.photos / "Link to sub") == f.photos / "sub");
+    REQUIRE(run_until(f.loop, [&] {
+        Names selected = f.folder()->selected_names();
+        std::ranges::sort(selected);
+        return selected == Names{"Link to a.txt", "Link to sub"};
+    }));
 }
 
 TEST_CASE("context menu: New File, empty or from a template, never over an existing file") {

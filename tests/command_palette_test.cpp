@@ -492,9 +492,9 @@ TEST_CASE("palette in the browser: every command is offered where it can be used
         CAPTURE(id);
         CHECK(seen.contains(id));
     }
-    for (const char* id :
-         {"sort:size", "sort:descending", "view:zoom_in", "view:select_all", "view:parent",
-          "go:", "command:empty_trash", "command:new_file", "command:open"}) {
+    for (const char* id : {"sort:size", "sort:descending", "view:zoom_in", "view:select_all",
+                           "view:parent", "go:", "command:empty_trash", "command:new_file",
+                           "command:open", "command:create_link"}) {
         if (std::string_view{id} == "go:") {
             CHECK(seen.contains("go:" + f.b.string()));
         } else {

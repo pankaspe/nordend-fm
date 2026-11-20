@@ -11,6 +11,7 @@
 #include "nordend/fs/compress.hpp"
 #include "nordend/fs/erase.hpp"
 #include "nordend/fs/extract.hpp"
+#include "nordend/fs/links.hpp"
 #include "nordend/fs/trash.hpp"
 
 namespace nordend::fs {
@@ -155,6 +156,9 @@ void TransferQueue::work() {
                 break;
             case TransferKind::compress:
                 result = run_compress(*request, token, callbacks);
+                break;
+            case TransferKind::link:
+                result = run_link(*request, token, callbacks);
                 break;
         }
         loop_.post([this, alive = alive_, request, result = std::move(result)] {

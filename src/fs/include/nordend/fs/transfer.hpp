@@ -21,6 +21,7 @@ enum class TransferKind : std::uint8_t {
     erase,        // run_erase (erase.hpp): deleted for good; destination unused
     empty_trash,  // run_erase: names are trashes, everything in them goes
     compress,     // run_compress (compress.hpp): one archive of the names, in destination
+    link,         // run_link (links.hpp): a symbolic link to each name, in destination
 };
 
 struct TransferRequest {
