@@ -10,6 +10,8 @@
 #include <unistd.h>
 #include <utility>
 
+#include "nordend/fs/sort.hpp"
+
 namespace nordend::fs {
 namespace {
 
@@ -151,6 +153,63 @@ std::vector<std::optional<Entry>> read_entries(const std::filesystem::path& path
         result[i] = std::move(entry);
     }
     close(dir_fd);
+    return result;
+}
+
+Subfolders read_subfolders(const std::filesystem::path& path, const core::CancelToken& token,
+                           std::size_t limit) {
+    Subfolders result;
+    const std::unique_ptr<DIR, DirCloser> dir{opendir(path.c_str())};
+    if (!dir) {
+        result.error = {errno, std::generic_category()};
+        return result;
+    }
+    const int dir_fd = dirfd(dir.get());
+    struct stat self{};
+    if (fstat(dir_fd, &self) != 0) {
+        result.error = {errno, std::generic_category()};
+        return result;
+    }
+    result.device = self.st_dev;
+    result.inode = self.st_ino;
+    std::size_t seen = 0;
+    for (;;) {
+        errno = 0;
+        const dirent* item = readdir(dir.get());
+        if (item == nullptr) {
+            if (errno != 0) {
+                result.error = {errno, std::generic_category()};
+            }
+            break;
+        }
+        if (++seen % kCancelCheckInterval == 0 && token.cancelled()) {
+            return {};
+        }
+        const std::string_view name{static_cast<const char*>(item->d_name)};
+        if (name == "." || name == "..") {
+            continue;
+        }
+        bool folder = item->d_type == DT_DIR;
+        if (item->d_type == DT_LNK || item->d_type == DT_UNKNOWN) {
+            struct stat info{};
+            folder = fstatat(dir_fd, static_cast<const char*>(item->d_name), &info, 0) == 0 &&
+                     S_ISDIR(info.st_mode);
+        }
+        if (folder) {
+            result.names.emplace_back(name);
+        }
+    }
+    if (token.cancelled()) {
+        return {};
+    }
+    std::ranges::sort(result.names, [](const std::string& a, const std::string& b) {
+        return natural_compare(a, b) < 0;
+    });
+    if (result.names.size() > limit) {
+        result.more = result.names.size() - limit;
+        result.names.resize(limit);
+        result.names.shrink_to_fit();
+    }
     return result;
 }
 

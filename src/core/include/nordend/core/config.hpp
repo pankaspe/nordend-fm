@@ -61,6 +61,12 @@ struct Config {
         bool programs{true};
     };
 
+    struct Sidebar {
+        // A folder tree under the places: a chevron unfolds a folder's subfolders, read on a
+        // worker one level at a time. Followed live.
+        bool tree{false};
+    };
+
     // A custom entry of the context menu ([[action]]): a program run on the selected entries,
     // shown only when every one of them passes the filters. Followed live.
     struct Action {
@@ -89,6 +95,7 @@ struct Config {
     Window window;
     Terminal terminal;
     Open open;
+    Sidebar sidebar;
     std::vector<Action> actions;  // in the file's order; a broken one is left out
 };
 

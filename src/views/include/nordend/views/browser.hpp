@@ -243,6 +243,9 @@ public:
     // What the sidebar lists.
     void set_places(std::vector<fs::Place> places);
 
+    // A folder tree under the sidebar's places ([sidebar] tree); off lets every level go.
+    void set_sidebar_tree(bool on);
+
     // Opens files (directory's entries, never folders, types filled in where known). Without
     // one, Enter on a file does nothing.
     using OpenHandler =

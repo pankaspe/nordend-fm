@@ -6,6 +6,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <unistd.h>
 #include <vector>
 #include <xkbcommon/xkbcommon-keysyms.h>
 
@@ -20,6 +21,7 @@
 #include "nordend/ui/icons.hpp"
 #include "nordend/ui/text.hpp"
 #include "nordend/views/browser.hpp"
+#include "nordend/views/folder_tree.hpp"
 #include "nordend/views/sidebar.hpp"
 #include "temp_dir.hpp"
 
@@ -362,4 +364,121 @@ TEST_CASE("places: the sidebar opens a place from the keyboard") {
     browser.key(key(XKB_KEY_F6), now);
     CHECK(browser.sidebar_visible());
     CHECK(browser.sidebar().focused());
+}
+
+TEST_CASE("places: the sidebar's tree from the keyboard") {
+    TempDir dir;
+    fs::create_directories(dir.path / "a" / "inner" / "deep");
+    fs::create_directories(dir.path / "b");
+    EventLoop loop;
+    nordend::core::WorkerPool pool{loop, 2};
+    nordend::fs::DirectoryWatcher watcher{loop};
+    Browser browser{loop,    pool,
+                    watcher, nordend::fs::MimeDatabase::load(),
+                    [] {},   [](nordend::ui::CursorShape /*shape*/) {}};
+    browser.set_places({{.section = Place::Section::bookmarks,
+                         .label = "a",
+                         .path = dir.path / "a",
+                         .icon = "folder",
+                         .disk = {}},
+                        {.section = Place::Section::bookmarks,
+                         .label = "b",
+                         .path = dir.path / "b",
+                         .icon = "folder",
+                         .disk = {}}});
+    browser.open(dir.path / "b");
+    browser.set_mode(Browser::Mode::grid);
+    REQUIRE(run_until(loop, [&] { return !browser.loading(); }));
+    const auto now = Browser::Clock::now();
+    auto& sidebar = browser.sidebar();
+
+    // Without the tree Left and Right are the sidebar's, and do nothing.
+    browser.key(key(XKB_KEY_F6), now);
+    CHECK(browser.key(key(XKB_KEY_Right), now));
+    CHECK(browser.key(key(XKB_KEY_Left), now));
+    CHECK(sidebar.cursor() == 0U);
+    CHECK(sidebar.cursor_folder().empty());
+
+    browser.set_sidebar_tree(true);
+    REQUIRE(sidebar.tree() != nullptr);
+    const auto settled = [&] { return run_until(loop, [&] { return !sidebar.tree()->busy(); }); };
+    browser.key(key(XKB_KEY_Right), now);  // unfolds a
+    REQUIRE(settled());
+    CHECK(sidebar.cursor_folder().empty());
+    browser.key(key(XKB_KEY_Right), now);  // into it
+    CHECK(sidebar.cursor() == 0U);
+    CHECK(sidebar.cursor_folder() == dir.path / "a" / "inner");
+    browser.key(key(XKB_KEY_Down), now);
+    CHECK(sidebar.cursor() == 1U);
+    CHECK(sidebar.cursor_folder().empty());
+    browser.key(key(XKB_KEY_Up), now);
+    browser.key(key(XKB_KEY_Right), now);  // unfolds inner
+    REQUIRE(settled());
+    browser.key(key(XKB_KEY_Right), now);
+    CHECK(sidebar.cursor_folder() == dir.path / "a" / "inner" / "deep");
+    browser.key(key(XKB_KEY_Left), now);  // deep is folded: up to inner
+    CHECK(sidebar.cursor_folder() == dir.path / "a" / "inner");
+    browser.key(key(XKB_KEY_Left), now);  // folds inner
+    CHECK(sidebar.cursor_folder() == dir.path / "a" / "inner");
+    CHECK(sidebar.tree()->fold_of(dir.path / "a", dir.path / "a" / "inner", false) ==
+          nordend::views::FolderTree::Fold::folded);
+    browser.key(key(XKB_KEY_Left), now);  // up to the place
+    CHECK(sidebar.cursor() == 0U);
+    CHECK(sidebar.cursor_folder().empty());
+
+    // F2 and Alt+Down are the bookmarks', not the folders' in their tree.
+    browser.key(key(XKB_KEY_Right), now);
+    REQUIRE(sidebar.cursor_folder() == dir.path / "a" / "inner");
+    browser.key(key(XKB_KEY_F2), now);
+    CHECK_FALSE(sidebar.renaming());
+    nordend::ui::KeyEvent alt_down = key(XKB_KEY_Down);
+    alt_down.modifiers.alt = true;
+    CHECK(browser.key(alt_down, now));
+    CHECK(sidebar.cursor_folder() == dir.path / "a" / "inner");
+    CHECK(labels(sidebar.places()) == std::vector<std::string>{"a", "b"});
+
+    // Enter opens the folder.
+    browser.key(key(XKB_KEY_Return), now);
+    CHECK_FALSE(sidebar.focused());
+    REQUIRE(run_until(loop, [&] { return !browser.loading(); }));
+    CHECK(browser.grid().folder()->path() == dir.path / "a" / "inner");
+
+    // Off: the levels go, the cursor is back on a place.
+    browser.key(key(XKB_KEY_F6), now);
+    browser.set_sidebar_tree(false);
+    CHECK(sidebar.tree() == nullptr);
+    CHECK(sidebar.cursor_folder().empty());
+    browser.key(key(XKB_KEY_Escape), now);
+}
+
+TEST_CASE("places: the sidebar's tree says why a folder does not unfold") {
+    TempDir dir;
+    fs::create_directories(dir.path / "a" / "locked");
+    fs::create_directory_symlink(".", dir.path / "a" / "up");  // a itself
+    EventLoop loop;
+    nordend::core::WorkerPool pool{loop, 2};
+    nordend::fs::DirectoryWatcher watcher{loop};
+    Browser browser{loop,    pool,
+                    watcher, nordend::fs::MimeDatabase::load(),
+                    [] {},   [](nordend::ui::CursorShape /*shape*/) {}};
+    const fs::path a = dir.path / "a";
+    browser.set_places({{.label = "a", .path = a, .icon = "folder"}});
+    browser.set_sidebar_tree(true);
+    nordend::views::FolderTree& tree = *browser.sidebar().tree();
+    const auto settled = [&] { return run_until(loop, [&] { return !tree.busy(); }); };
+    tree.unfold(a, a);
+    REQUIRE(settled());
+    tree.unfold(a, a / "up");
+    REQUIRE(settled());
+    CHECK(browser.status_bar().message() == "“up” leads back to a folder above it");
+    CHECK(tree.fold_of(a, a / "up", false) == nordend::views::FolderTree::Fold::failed);
+
+    if (geteuid() == 0) {
+        return;  // root reads it anyway
+    }
+    fs::permissions(a / "locked", fs::perms::none);
+    tree.unfold(a, a / "locked");
+    REQUIRE(settled());
+    CHECK(browser.status_bar().message() == "“locked” could not be read: Permission denied");
+    fs::permissions(a / "locked", fs::perms::owner_all);
 }

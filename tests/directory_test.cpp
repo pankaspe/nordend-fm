@@ -4,6 +4,7 @@
 #include <chrono>
 #include <filesystem>
 #include <string>
+#include <sys/stat.h>
 #include <vector>
 
 #include <doctest/doctest.h>
@@ -21,8 +22,10 @@ using nordend::fs::EntryKind;
 using nordend::fs::Listing;
 using nordend::fs::load_directory;
 using nordend::fs::read_directory;
+using nordend::fs::read_subfolders;
 using nordend::fs::ReadOptions;
 using nordend::fs::ReadResult;
+using nordend::fs::Subfolders;
 using nordend::test::TempDir;
 using namespace std::chrono_literals;
 
@@ -117,6 +120,65 @@ TEST_CASE("read_directory: a cancelled read stops and delivers nothing more") {
                        token.cancel();
                    });
     CHECK(delivered == 10);
+}
+
+TEST_CASE("read_subfolders: folders and links to them, in natural order, hidden ones kept") {
+    const TempDir dir;
+    for (const char* name : {"img10", "img2", "Sub", ".hidden"}) {
+        std::filesystem::create_directory(dir.path / name);
+    }
+    dir.write("file.txt", "");
+    std::filesystem::create_directory_symlink("img2", dir.path / "link-to-dir");
+    std::filesystem::create_symlink("file.txt", dir.path / "link-to-file");
+    std::filesystem::create_symlink("missing", dir.path / "dangling");
+
+    const Subfolders read = read_subfolders(dir.path, CancelToken{}, 100);
+    CHECK_FALSE(read.error);
+    CHECK(read.names == std::vector<std::string>{".hidden", "img2", "img10", "link-to-dir", "Sub"});
+    CHECK(read.more == 0);
+}
+
+TEST_CASE("read_subfolders: past the limit, the rest is counted") {
+    const TempDir dir;
+    for (const char* name : {"e", "d", "c", "b", "a"}) {
+        std::filesystem::create_directory(dir.path / name);
+    }
+    const Subfolders read = read_subfolders(dir.path, CancelToken{}, 3);
+    CHECK(read.names == std::vector<std::string>{"a", "b", "c"});
+    CHECK(read.more == 2);
+}
+
+TEST_CASE("read_subfolders: errors, and the folder it opened") {
+    const TempDir dir;
+    CHECK(read_subfolders(dir.path / "absent", CancelToken{}, 10).error ==
+          std::errc::no_such_file_or_directory);
+    dir.write("file", "");
+    CHECK(read_subfolders(dir.path / "file", CancelToken{}, 10).error ==
+          std::errc::not_a_directory);
+
+    std::filesystem::create_directory(dir.path / "real");
+    std::filesystem::create_directory_symlink("real", dir.path / "link");
+    struct stat real{};
+    REQUIRE(stat((dir.path / "real").c_str(), &real) == 0);
+    for (const char* name : {"real", "link"}) {
+        const Subfolders read = read_subfolders(dir.path / name, CancelToken{}, 10);
+        CHECK_FALSE(read.error);
+        CHECK(read.device == real.st_dev);
+        CHECK(read.inode == real.st_ino);
+    }
+}
+
+TEST_CASE("read_subfolders: a cancelled read gives nothing") {
+    const TempDir dir;
+    for (int i = 0; i < 200; ++i) {
+        std::filesystem::create_directory(dir.path / ("d" + std::to_string(i)));
+    }
+    const CancelToken token;
+    token.cancel();
+    const Subfolders read = read_subfolders(dir.path, token, 1000);
+    CHECK_FALSE(read.error);
+    CHECK(read.names.empty());
+    CHECK(read.more == 0);
 }
 
 TEST_CASE("load_directory: chunks on the loop thread, then done, into a sorted Listing") {

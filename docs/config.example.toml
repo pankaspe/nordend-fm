@@ -62,6 +62,10 @@ follow_accent = true
 # Scripts never start this way: they open as text. false: Nordend never starts a program.
 programs = true
 
+[sidebar]
+# A folder tree under the places: a chevron unfolds a folder's subfolders. Read live.
+tree = false
+
 # Actions: entries of your own in the context menu, each running a program on the selected files.
 # None by default. An action shows only when every selected entry fits it: its kinds ("file",
 # "folder"; files only by default), and its patterns (globs on the whole name, case left aside)
