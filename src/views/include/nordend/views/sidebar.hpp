@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -18,6 +19,7 @@
 #include "nordend/ui/scroller.hpp"
 #include "nordend/ui/seat.hpp"
 #include "nordend/ui/text_field.hpp"
+#include "nordend/views/folder_tree.hpp"
 
 namespace nordend::views {
 
@@ -31,6 +33,10 @@ namespace nordend::views {
 // the sidebar (the browser moves it there and back), where Up/Down, Home/End move a cursor and
 // Escape leaves; a right click asks for a place's menu. Its right edge drags to resize it; a double
 // click there restores the width.
+//
+// With a folder tree, a chevron before each folder place unfolds the folders in it, and theirs in
+// turn; Right and Left do the same from the keyboard, and Enter or a click on a name opens one.
+// Folders in the tree take no drops and have no menu.
 //
 // Loop thread only.
 class Sidebar {
@@ -59,6 +65,17 @@ public:
     [[nodiscard]] std::optional<ui::Rect> eject_icon(const std::filesystem::path& path) const;
 
     void set_places(std::vector<fs::Place> places);
+
+    // The folder tree under the places ([sidebar] tree); nullptr: none.
+    void set_tree(std::unique_ptr<FolderTree> tree);
+
+    [[nodiscard]] FolderTree* tree() const noexcept { return tree_.get(); }
+
+    // Hidden folders are shown in the tree (Ctrl+H).
+    void set_show_hidden(bool show);
+
+    // A disk is about to be unmounted or ejected: its folders in the tree are folded.
+    void release_under(const std::filesystem::path& mount_point);
 
     // A right click on a place: menu(place, x, y).
     using MenuHandler = std::function<void(const fs::Place& place, float x, float y)>;
@@ -100,7 +117,19 @@ public:
 
     [[nodiscard]] bool focused() const noexcept { return focused_; }
 
+    // The place under the cursor, or the one whose tree holds it.
     [[nodiscard]] std::optional<std::size_t> cursor() const noexcept { return cursor_; }
+
+    // The folder under the cursor in cursor()'s tree; empty on the place itself.
+    [[nodiscard]] const std::filesystem::path& cursor_folder() const noexcept {
+        return cursor_folder_;
+    }
+
+    // The row marked as the current folder's, as last drawn: the deepest one shown that holds
+    // it, in the tree of the current place; empty for the place itself.
+    [[nodiscard]] const std::filesystem::path& current_folder() const noexcept {
+        return current_folder_;
+    }
 
     [[nodiscard]] bool animating() const noexcept { return scroller_.animating(); }
 
@@ -168,15 +197,36 @@ private:
         float top{0.0F};                   // content coordinates
         std::optional<std::size_t> place;  // nullopt: the title of section
         fs::Place::Section section{fs::Place::Section::places};
+        // In place's tree: the folder, at depth 1 right under the place; empty for the place.
+        std::filesystem::path folder{};  // NOLINT(readability-redundant-member-init): GCC's
+                                         // -Wmissing-field-initializers
+        std::size_t depth{0};
+        std::size_t more{0};  // the row that says how many more folders the level has
     };
 
     void layout();
+    // The row of a place (folder empty) or of a folder in its tree, as laid out.
+    [[nodiscard]] std::optional<std::size_t> row_of(std::size_t place,
+                                                    const std::filesystem::path& folder) const;
+    // The row of a place or a folder at a window point (titles left out).
+    [[nodiscard]] std::optional<std::size_t> row_at(float x, float y) const;
+    // A place's own row only.
     [[nodiscard]] std::optional<std::size_t> place_at(float x, float y) const;
+    // How the row's folder stands in the tree; nullopt without a tree, or for a place that has
+    // none (the trash, a disk not mounted).
+    [[nodiscard]] std::optional<FolderTree::Fold> fold_at(const Row& row) const;
+    // A click at x on the row hits its chevron.
+    [[nodiscard]] bool on_chevron(const Row& row, float x) const;
+    void toggle(const Row& row);
+    // How far the row's chevron, icon and name move right.
+    [[nodiscard]] float shift(const Row& row) const noexcept;
+    void put_cursor(const Row& row);
     // The place whose eject icon is at a point (a little wider than the icon).
     [[nodiscard]] std::optional<std::size_t> eject_at(float x, float y) const;
     [[nodiscard]] bool on_edge(float x, float y) const;
     void update_hover();
     void choose(std::size_t place);
+    void choose(const Row& row);
 
     std::function<void()> redraw_;
     std::function<void(ui::CursorShape)> set_cursor_;
@@ -190,8 +240,12 @@ private:
     std::vector<Row> rows_;
     float content_height_{0.0F};
     std::optional<std::size_t> current_;  // the place holding the folder shown, as last drawn
-    std::optional<std::size_t> cursor_;   // while focused
-    std::optional<std::size_t> hovered_;
+    std::filesystem::path current_folder_;
+    std::optional<std::size_t> cursor_;  // while focused
+    std::filesystem::path cursor_folder_;
+    std::optional<std::size_t> hovered_;  // a row
+    std::unique_ptr<FolderTree> tree_;
+    bool show_hidden_{false};
     std::optional<std::filesystem::path> drop_target_;
     bool bookmark_drop_{false};
     bool focused_{false};

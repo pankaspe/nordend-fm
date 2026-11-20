@@ -36,6 +36,7 @@ void check_defaults(const Config& config) {
     CHECK(config.terminal.program.empty());
     CHECK(config.terminal.args.empty());
     CHECK(config.open.programs);
+    CHECK_FALSE(config.sidebar.tree);
     CHECK(config.actions.empty());
 }
 
@@ -105,6 +106,9 @@ follow_accent = false
 [terminal]
 program = "ghostty"
 args = ["--gtk-single-instance=false"]
+
+[sidebar]
+tree = true
 )");
     CHECK(result.problems.empty());
     CHECK(result.config.font.family == "Inter:weight=medium");
@@ -117,6 +121,7 @@ args = ["--gtk-single-instance=false"]
     CHECK_FALSE(result.config.icon.follow_accent);
     CHECK(result.config.terminal.program == "ghostty");
     CHECK(result.config.terminal.args == std::vector<std::string>{"--gtk-single-instance=false"});
+    CHECK(result.config.sidebar.tree);
 }
 
 TEST_CASE("dotted keys work like sections") {
@@ -338,6 +343,16 @@ TEST_CASE("open: programs may be turned off; anything but a boolean is reported"
     CHECK(wrong.config.open.programs);
     const auto unknown = parse("[open]\nscripts = true\n");
     CHECK(unknown.problems.size() == 1);
+}
+
+TEST_CASE("sidebar: the tree may be turned on; anything but a boolean is reported") {
+    const auto on = parse("[sidebar]\ntree = true\n");
+    CHECK(on.problems.empty());
+    CHECK(on.config.sidebar.tree);
+    const auto wrong = parse("[sidebar]\ntree = \"yes\"\n");
+    REQUIRE(wrong.problems.size() == 1);
+    CHECK(contains(wrong.problems[0], "'sidebar.tree'"));
+    CHECK_FALSE(wrong.config.sidebar.tree);
 }
 
 TEST_CASE("actions: every key, the defaults, a line or a list, in the file's order") {

@@ -23,6 +23,7 @@ add_library(nordend_views
     src/file_clipboard.cpp
     src/draw_helpers.cpp
     src/folder.cpp
+    src/folder_tree.cpp
     src/format.cpp
     src/file_finder.cpp
     src/fuzzy.cpp

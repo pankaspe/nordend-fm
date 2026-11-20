@@ -773,6 +773,9 @@ int main(int argc, char** argv) {
                 opener->set_terminal(configured_terminal(fresh));
                 opener->set_programs(fresh.open.programs);
             }
+            if (columns) {
+                columns->set_sidebar_tree(fresh.sidebar.tree);
+            }
             give_actions(fresh);
         };
         // Writes state.toml as things change; the window's size is the one it has when neither
@@ -812,6 +815,7 @@ int main(int argc, char** argv) {
                                        std::move(done));
                 });
             opener->set_programs(config.open.programs);
+            columns->set_sidebar_tree(config.sidebar.tree);
             // A program without its execute bit: Nordend's card asks before it runs.
             opener->set_ask_to_run(
                 [&](const std::filesystem::path& program, std::function<void()> allow_and_run) {

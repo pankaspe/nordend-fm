@@ -31,6 +31,8 @@
 #include "nordend/ui/text.hpp"
 #include "nordend/views/browser.hpp"
 #include "nordend/views/file_clipboard.hpp"
+#include "nordend/views/folder_tree.hpp"
+#include "nordend/views/sidebar.hpp"
 #include "temp_dir.hpp"
 
 using nordend::core::EventLoop;
@@ -1088,4 +1090,63 @@ TEST_CASE("sidebar bookmarks: the label's field selects with a drag and a double
     f.pointer(PointerEvent::Kind::release, {box.right() - 1.0F, y}, 2);
     CHECK(field.selection() == all);
     CHECK(f.browser.key(key(XKB_KEY_Escape), Browser::Clock::now()));
+}
+
+TEST_CASE("sidebar tree: the chevron unfolds, a name opens, F6 lands on it; no drops there") {
+    Fixture f;
+    if (!f.gl) {
+        return;
+    }
+    fs::create_directories(f.album / "2026" / "june");
+    f.browser.set_sidebar_tree(true);
+    f.show(f.root, Browser::Mode::grid);
+    float album_y = -1.0F;
+    for (float y = 0.0F; y < kHeight && album_y < 0.0F; y += 3.0F) {
+        if (const nordend::fs::Place* found = f.browser.sidebar().place_under(100.0F, y);
+            found != nullptr && found->path == f.album) {
+            album_y = y + 6.0F;
+        }
+    }
+    REQUIRE(album_y >= 0.0F);
+    nordend::views::FolderTree& tree = *f.browser.sidebar().tree();
+    const auto click = [&f](float x, float y) {
+        f.pointer(PointerEvent::Kind::motion, {x, y});
+        f.pointer(PointerEvent::Kind::press, {x, y});
+        f.pointer(PointerEvent::Kind::release, {x, y});
+    };
+
+    click(14.0F, album_y);  // its chevron
+    REQUIRE(run_until(f.loop, [&] { return !tree.busy(); }));
+    f.draw();
+    CHECK(tree.fold_of(f.album, f.album, false) == nordend::views::FolderTree::Fold::unfolded);
+    CHECK(f.browser.grid().folder()->path() == f.root);  // nothing opened
+    const float year_y = album_y + nordend::views::Sidebar::kRowHeight;
+    CHECK(f.browser.sidebar().place_under(100.0F, year_y) == nullptr);  // a folder, no place
+    CHECK_FALSE(f.browser.sidebar().in_bookmark_zone(100.0F, year_y));
+
+    // A drop onto it does nothing.
+    f.show(f.photos, Browser::Mode::grid);
+    f.drag(f.photos, "P2.ORF");
+    f.browser.drop_event({.kind = DropEvent::Kind::enter, .x = 100.0F, .y = year_y});
+    f.browser.drop_event({.kind = DropEvent::Kind::motion, .x = 100.0F, .y = year_y});
+    CHECK_FALSE(f.dnd.accepted);
+    f.drop_at({100.0F, year_y});
+    CHECK(listing(f.photos) == Names{"P1.ORF", "P1.ORF.xmp", "P2.ORF"});
+    CHECK(listing(f.album / "2026") == Names{"june"});
+
+    // A click on its name opens it, and its row is the current one.
+    click(100.0F, year_y);
+    REQUIRE(f.settle());
+    CHECK(f.browser.grid().folder()->path() == f.album / "2026");
+    CHECK(f.browser.sidebar().current_folder() == f.album / "2026");
+    f.browser.key(key(XKB_KEY_F6), Browser::Clock::now());
+    CHECK(f.browser.sidebar().cursor() == 0U);
+    CHECK(f.browser.sidebar().cursor_folder() == f.album / "2026");
+    f.browser.key(key(XKB_KEY_Escape), Browser::Clock::now());
+
+    // Folded again, the place's row is the current one.
+    click(14.0F, album_y);
+    f.draw();
+    CHECK(tree.levels() == 0);
+    CHECK(f.browser.sidebar().current_folder().empty());
 }

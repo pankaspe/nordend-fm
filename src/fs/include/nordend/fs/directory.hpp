@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <optional>
@@ -41,6 +43,22 @@ ReadResult read_directory(const std::filesystem::path& path, const core::CancelT
 std::vector<std::optional<Entry>> read_entries(const std::filesystem::path& path,
                                                const std::vector<std::string>& names,
                                                const ReadOptions& options);
+
+// The folders in a folder, as the sidebar's tree shows them.
+struct Subfolders {
+    std::error_code error;           // the folder could not be opened or read
+    std::vector<std::string> names;  // natural order (natural_compare), hidden ones too
+    std::size_t more{0};             // folders left out past the limit
+    std::uint64_t device{0};         // the folder itself, as opened (links followed)
+    std::uint64_t inode{0};
+};
+
+// Reads the folders in a folder (blocking: workers only), links to folders included. readdir's
+// type decides when the file system gives one; only links and entries of unknown type are
+// stat'ed. Keeps the first limit names in natural order and counts the rest. Stops early, with
+// nothing, when token is cancelled.
+Subfolders read_subfolders(const std::filesystem::path& path, const core::CancelToken& token,
+                           std::size_t limit);
 
 // read_directory on a worker: on_chunk and on_done run on the loop thread, in order. Cancel the
 // returned token to stop; nothing more is delivered after that.

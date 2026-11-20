@@ -27,6 +27,7 @@
 #include "nordend/fs/operations.hpp"
 #include "nordend/fs/places.hpp"
 #include "nordend/fs/trash.hpp"
+#include "nordend/views/folder_tree.hpp"
 #include "nordend/views/format.hpp"
 
 namespace nordend::views {
@@ -1041,6 +1042,27 @@ void Browser::place_menu(const fs::Place& place, float x, float y) {
 void Browser::set_places(std::vector<fs::Place> places) {
     places_ = std::move(places);
     show_places();
+}
+
+void Browser::set_sidebar_tree(bool on) {
+    if (on == (sidebar_.tree() != nullptr)) {
+        return;
+    }
+    if (!on) {
+        sidebar_.set_tree(nullptr);
+        return;
+    }
+    auto tree = std::make_unique<FolderTree>(loop_, pool_, watcher_);
+    tree->set_fail_handler([this](const std::filesystem::path& folder, std::error_code error) {
+        const std::string name =
+            folder.has_filename() ? folder.filename().string() : folder.string();
+        if (error) {
+            show_message(std::format("“{}” could not be read: {}", name, error.message()), true);
+        } else {
+            show_message(std::format("“{}” leads back to a folder above it", name), false);
+        }
+    });
+    sidebar_.set_tree(std::move(tree));
 }
 
 void Browser::show_places() {
@@ -2418,6 +2440,7 @@ MenuItem Browser::sort_menu() {
 
 void Browser::set_show_hidden(bool show) {
     show_hidden_ = show;
+    sidebar_.set_show_hidden(show);
     for (const std::unique_ptr<Pane>& each : panes_) {
         each->columns.set_show_hidden(show);
         each->grid.set_show_hidden(show);
@@ -2549,6 +2572,7 @@ bool Browser::restore_tabs(const std::vector<State::Tab>& tabs, std::size_t show
 
 void Browser::apply(const State& state) {
     show_hidden_ = state.show_hidden;
+    sidebar_.set_show_hidden(state.show_hidden);
     palette_recent_ = state.palette_recent;
     for (const std::unique_ptr<Pane>& each : panes_) {
         each->columns.set_show_hidden(state.show_hidden);
@@ -3998,6 +4022,8 @@ void Browser::mount_image(const std::filesystem::path& image) {
 }
 
 void Browser::leave_disk(const std::filesystem::path& mount_point) {
+    // A level still being read would hold the disk open.
+    sidebar_.release_under(mount_point);
     const std::shared_ptr<Folder> shown = current_folder();
     if (!shown || mount_point.empty()) {
         return;

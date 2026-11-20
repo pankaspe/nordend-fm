@@ -481,6 +481,11 @@ void read_document(const toml::table& root, Reader& reader, Config& config) {
                 node, "open", {{"programs", [&](const toml::node& value, const std::string& path) {
                                     reader.read_bool(value, path, config.open.programs);
                                 }}});
+        } else if (key.str() == "sidebar") {
+            reader.read_section(node, "sidebar",
+                                {{"tree", [&](const toml::node& value, const std::string& path) {
+                                      reader.read_bool(value, path, config.sidebar.tree);
+                                  }}});
         } else if (key.str() == "action") {
             const toml::array* actions = node.as_array();
             if (actions == nullptr) {
