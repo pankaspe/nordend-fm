@@ -1149,6 +1149,12 @@ void Browser::transfer_progress(const fs::TransferRequest& request,
                 : std::format("Compressing {} {} into “{}” · {} of {}", progress.files_total,
                               progress.files_total == 1 ? "file" : "files", request.archive_name,
                               format_size(progress.bytes_done), format_size(progress.bytes_total));
+    } else if (request.kind == fs::TransferKind::link) {
+        status.fraction = progress.files_total > 0 ? static_cast<float>(progress.files_done) /
+                                                         static_cast<float>(progress.files_total)
+                                                   : -1.0F;
+        status.text =
+            std::format("Making {} of {} links", progress.files_done, progress.files_total);
     } else if (progress.preparing) {
         status.text = std::format("Getting ready to {} {} {}…", doing(request.from_archive, !copy),
                                   items, items == 1 ? "item" : "items");
@@ -1241,6 +1247,10 @@ void Browser::report_done(const fs::TransferRequest& request, const fs::Transfer
         compress_done(request, result);
         return;
     }
+    if (request.kind == fs::TransferKind::link) {
+        links_done(request, result);
+        return;
+    }
     const bool copy = request.kind == fs::TransferKind::copy;
     const bool extract = request.from_archive;
     const std::string_view done = done_word(extract, !copy);
@@ -1301,6 +1311,54 @@ void Browser::compress_done(const fs::TransferRequest& request, const fs::Transf
             editor_.start(folder, name, false);
         }
     }
+}
+
+void Browser::links_done(const fs::TransferRequest& request, const fs::TransferResult& result) {
+    const std::size_t made = result.placed.size();
+    const std::string what = std::format("{} {}", made, made == 1 ? "link" : "links");
+    if (!result.refused.empty()) {
+        show_message(result.refused, true);
+    } else if (result.cancelled) {
+        show_message(std::format("Stopped: {} made so far", what), false);
+    } else if (!result.errors.empty()) {
+        show_message(std::format("Made {}; {} could not be: {}", what, result.errors.size(),
+                                 result.errors.front()),
+                     true);
+    } else if (result.placed.empty()) {
+        show_message("Nothing to do: every name was skipped", false);
+    } else {
+        show_message(std::format("Made {}", what), false);
+    }
+    // Selected, ready to rename or drag away, when their folder is the one shown.
+    if (const std::shared_ptr<Folder> folder = current_folder();
+        folder && folder->path() == request.destination && !result.placed.empty()) {
+        folder->expect_names(result.placed);
+    }
+}
+
+void Browser::create_links() {
+    const std::shared_ptr<Folder> folder = current_folder();
+    if (!folder || folder->is_trash() || folder->is_archive()) {
+        return;
+    }
+    std::vector<std::string> names = targets(*folder);
+    if (names.empty()) {
+        return;
+    }
+    const std::size_t count = names.size();
+    // Recorded as a copy, as Compress is: Ctrl+Z moves the new links to the trash, never what
+    // they lead to.
+    submit({.kind = fs::TransferKind::link,
+            .source = folder->path(),
+            .names = std::move(names),
+            .destination = folder->path()},
+           open_batch(Purpose::user, FileOperation::Kind::copy));
+    if (!status_bar_.transfer()) {
+        status_bar_.set_transfer(TransferStatus{
+            .text = std::format("Making {} {}…", count, count == 1 ? "link" : "links"),
+            .fraction = -1.0F});
+    }
+    redraw_();
 }
 
 void Browser::compress(bool tar_gz) {
@@ -1954,6 +2012,7 @@ std::vector<MenuItem> Browser::entry_menu(const std::shared_ptr<Folder>& folder)
     add(
         "paste", "Paste", keys_for(Command::paste), [this] { paste(); }, false,
         !clipboard_.names.empty());
+    add("create_link", "Create Link", "", [this] { create_links(); });
     add(
         "rename", "Rename…", keys_for(Command::rename), [this] { start_rename(); }, true,
         count == 1);

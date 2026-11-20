@@ -659,3 +659,20 @@ TEST_CASE("transfer queue: progress, a question answered later, the result") {
     answer.value_or(std::function<void(Resolution)>{})(Resolution::replace);  // too late
     CHECK(read_file(t.to / "notes.txt") == "old");
 }
+
+TEST_CASE("transfer queue: a link request runs and reports like the others") {
+    Tree t;
+    EventLoop loop;
+    std::optional<TransferResult> done;
+    TransferQueue queue{loop, nullptr, nullptr,
+                        [&](const TransferRequest& request, const TransferResult& result) {
+                            CHECK(request.kind == TransferKind::link);
+                            done = result;
+                        }};
+    queue.submit(
+        {.kind = TransferKind::link, .source = t.from, .names = {"P1.ORF"}, .destination = t.to});
+    REQUIRE(run_until(loop, [&] { return done.has_value(); }));
+    CHECK(done.value_or(TransferResult{}).placed == Names{"P1.ORF"});
+    CHECK(fs::read_symlink(t.to / "P1.ORF") == "../from/P1.ORF");
+    CHECK(listing(t.to) == Names{"P1.ORF"});  // the sidecars stay with the photo
+}

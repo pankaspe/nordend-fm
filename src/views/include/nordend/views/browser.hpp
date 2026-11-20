@@ -476,6 +476,11 @@ public:
     // to it, renamed at once when it arrives.
     void compress(bool tar_gz);
 
+    // "Create Link": a symbolic link to each of the selection (or the cursor's entry) next to it,
+    // "Link to P1.ORF", selected when it arrives. Ctrl+Z moves the links to the trash, as it does
+    // copies.
+    void create_links();
+
     // Where a drop would go now, as the views mark it.
     [[nodiscard]] const DropMark& drop_mark() const noexcept { return drop_mark_; }
 
@@ -700,6 +705,7 @@ private:
     void travel(int direction);
     void trash_done(const fs::TransferResult& result);
     void compress_done(const fs::TransferRequest& request, const fs::TransferResult& result);
+    void links_done(const fs::TransferRequest& request, const fs::TransferResult& result);
     void restore_done(const fs::TransferResult& result);
     // Pastes files read from the system clipboard (at generation) into destination.
     void paste_files(const std::filesystem::path& destination, const ClipboardFiles& files,
