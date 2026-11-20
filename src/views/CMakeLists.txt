@@ -30,6 +30,7 @@ add_library(nordend_views
     src/info_pane.cpp
     src/name_editor.cpp
     src/pane.cpp
+    src/path_entry.cpp
     src/scroll_bar.cpp
     src/shortcuts.cpp
     src/shortcuts_overlay.cpp

@@ -44,6 +44,7 @@
 #include "nordend/views/info_pane.hpp"
 #include "nordend/views/name_editor.hpp"
 #include "nordend/views/pane.hpp"
+#include "nordend/views/path_entry.hpp"
 #include "nordend/views/pick_bar.hpp"
 #include "nordend/views/quick_look.hpp"
 #include "nordend/views/shortcuts.hpp"
@@ -363,11 +364,17 @@ public:
 
     [[nodiscard]] Breadcrumb& breadcrumb() noexcept { return breadcrumb_; }
 
+    [[nodiscard]] PathEntry& path_entry() noexcept { return path_entry_; }
+
     [[nodiscard]] StatusBar& status_bar() noexcept { return status_bar_; }
 
     [[nodiscard]] ShortcutsOverlay& shortcuts_overlay() noexcept { return shortcuts_; }
 
     [[nodiscard]] NameEditor& name_editor() noexcept { return editor_; }
+
+    // Ctrl+L: the breadcrumb becomes a field with the folder's path in it, ready to be typed
+    // over (Enter goes to the path typed, Escape gives the breadcrumb back).
+    void open_path_entry();
 
     // F2: edits the name of the entry under the cursor (nothing without one).
     void start_rename();
@@ -744,6 +751,10 @@ private:
     bool text_field_key(const ui::KeyEvent& event);
     // Ctrl+V in a text field: the clipboard's text, into the field that has the keyboard.
     void paste_text();
+    // Lists a folder for the path entry on a worker (read_directory, or an archive's tree when
+    // the path goes through one), and hands it to done on the loop thread.
+    [[nodiscard]] core::CancelToken list_for_entry(const std::filesystem::path& folder,
+                                                   std::function<void(PathEntry::Listing)> done);
     // "Open With…" in the palette: the palette again, with the applications for the cursor's entry.
     void open_with_palette();
     // The palette's list from the finder's results.
@@ -798,6 +809,7 @@ private:
         view,
         sidebar,
         breadcrumb,
+        path_entry,  // the breadcrumb's row while the path field is open
         status_bar,
         pick_bar,
         tabs,
@@ -869,6 +881,7 @@ private:
     QuickLook quick_look_;
     Sidebar sidebar_;
     Breadcrumb breadcrumb_;
+    PathEntry path_entry_;
     TabBar tab_bar_;
     StatusBar status_bar_;
     PickBar pick_bar_;
