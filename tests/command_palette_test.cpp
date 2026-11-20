@@ -469,6 +469,7 @@ TEST_CASE("palette in the browser: every command is offered where it can be used
         {Command::erase, "erase"},
         {Command::back, "back"},
         {Command::forward, "forward"},
+        {Command::path_entry, "path_entry"},
         {Command::toggle_hidden, "toggle_hidden"},
         {Command::add_bookmark, "add_bookmark"},
         {Command::new_tab, "new_tab"},

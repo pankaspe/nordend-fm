@@ -50,6 +50,7 @@ enum class Command : std::uint8_t {
     context_menu,
     back,
     forward,
+    path_entry,  // Ctrl+L: the breadcrumb becomes a field the path is typed into
     toggle_hidden,
     add_bookmark,
     open_terminal,

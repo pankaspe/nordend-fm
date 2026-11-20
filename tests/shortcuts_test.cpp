@@ -127,6 +127,7 @@ struct Fixture {
         }));
         browser.name_editor().cancel();
         REQUIRE_FALSE(browser.name_editor().active());
+        browser.path_entry().close();
         browser.quick_look().close();
         browser.shortcuts_overlay().close();
         browser.context_menu().close();
@@ -216,6 +217,35 @@ TEST_CASE("shortcuts: every one listed for the sidebar and Quick Look works ther
             }
         }
     }
+}
+
+TEST_CASE("shortcuts: Ctrl+L is listed once and opens the path field") {
+    int found = 0;
+    for (const Shortcut& shortcut : shortcuts()) {
+        if (shortcut.command != Command::path_entry) {
+            continue;
+        }
+        ++found;
+        CHECK(shortcut.keys == "Ctrl+L");
+        CHECK(shortcut.action == "Type a path (Tab completes)");
+        CHECK(shortcut.scope == (scope::kViews | scope::kSidebar | scope::kQuickLook));
+        CHECK(shortcut.keysyms ==
+              std::array<xkb_keysym_t, 8>{XKB_KEY_l, XKB_KEY_L, 0, 0, 0, 0, 0, 0});
+    }
+    CHECK(found == 1);
+    // It works in every view, and from the sidebar's keyboard, where it takes the keyboard
+    // back with it.
+    Fixture f;
+    for (const Browser::Mode mode : kModes) {
+        f.reset(mode);
+        CHECK(f.browser.key(chord(XKB_KEY_l, Modifiers{.ctrl = true}), Browser::Clock::now()));
+        CHECK(f.browser.path_entry().active());
+    }
+    f.reset(Browser::Mode::grid);
+    f.browser.sidebar().set_focused(true);
+    CHECK(f.browser.key(chord(XKB_KEY_L, Modifiers{.ctrl = true}), Browser::Clock::now()));
+    CHECK(f.browser.path_entry().active());
+    CHECK_FALSE(f.browser.sidebar().focused());
 }
 
 TEST_CASE("shortcuts: every one listed for renaming works in the name's field") {

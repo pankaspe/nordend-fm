@@ -38,6 +38,7 @@ add_executable(nordend-tests
     navigation_test.cpp
     palette_test.cpp
     paste_test.cpp
+    path_entry_test.cpp
     pick_test.cpp
     places_test.cpp
     pointer_shapes_test.cpp
