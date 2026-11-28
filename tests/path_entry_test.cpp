@@ -754,7 +754,8 @@ TEST_CASE("path entry: a path into an archive completes and opens it as a folder
                       [&] { return f.browser.path_entry().field().text() == "basic.zip/docs/"; }));
     CHECK(f.press(chord(XKB_KEY_Return)));
     REQUIRE(run_until(f.loop, [&] {
-        return f.shown() != nullptr && f.shown()->path() == f.root / "basic.zip" / "docs";
+        return f.shown() != nullptr && f.shown()->path() == f.root / "basic.zip" / "docs" &&
+               !f.browser.loading();
     }));
     CHECK(f.shown()->is_archive());
 }
