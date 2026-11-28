@@ -56,7 +56,8 @@ Status: `suspected` → `confirmed` → `reported` → `pr-open` → `fixed` (or
 - Actual: nothing; the key does not reach the source client either, so it cannot cancel it.
 - Notes / suspected cause: *to be verified* in Umbriel's source whether the drag grab keeps the
   keyboard and drops keys (wlroots leaves cancelling to the compositor). Ctrl/Shift modifiers do
-  reach the client during the drag.
+  reach the client during the drag. On Hyprland (2026-11-28) Escape reaches Nordend during its
+  drag and Nordend ends it by destroying its source, so the cause is Umbriel's alone.
 - Upstream: none yet (only with the author's OK)
 
 ### NB-001 — Umbriel title bars don't follow the Noctalia theme

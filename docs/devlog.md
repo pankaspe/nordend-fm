@@ -173,10 +173,15 @@ on the release's tree, about 110 million runs in all (dng 51.8 million, ljpeg 39
 camera 3.8, archive 2.5, tiff 1.6, picture 0.2; fewer than for 0.10.1, as a build shared the
 CPU): nothing found.
 
-**Open**
-- The first release built by Packit in COPR: to be checked before the release is announced.
-- Escape during a drag on Hyprland: keys reach the focused window there and a destroyed source
-  ends the drag, so it should work; to be confirmed by hand.
+**After the release**
+- Packit did not build 0.10.2 in COPR: `targets: fedora-stable` meant Fedora 43, 44 and 45, the
+  project had only 44 and 45, and adding a chroot needs admin rights Packit does not have, so the
+  build stopped at "Copr project update failed". Fedora 43 was added to the project by hand; a
+  re-run of Packit's checks from GitHub reached nothing, so 0.10.2 was built by hand as 0.10.1
+  was (an SRPM from the tag, `copr-cli build`, all three chroots green, installed and run in
+  clean Fedora 43 and 45 containers). The project now has every target Packit asks for: the
+  next release should build by itself.
+- Escape during a drag on Hyprland: tried by hand, it ends the drag.
 
 ---
 
